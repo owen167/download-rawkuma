@@ -185,7 +185,10 @@ class RawkumaBot(commands.Bot):
 
     async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         log.error("Slash command failed name=%s", getattr(interaction.command, "qualified_name", "unknown"), exc_info=(type(error), error, error.__traceback__))
-        message = "❌ The command failed. Check the bot logs for details."
+        if isinstance(error, app_commands.CommandSignatureMismatch):
+            message = "❌ This command registration is outdated. Please restart the bot with the latest version."
+        else:
+            message = "❌ The command failed. Check the bot logs for details."
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(message, ephemeral=True)

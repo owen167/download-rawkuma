@@ -33,6 +33,11 @@ def test_guild_mode_registers_download_in_one_scope_only(tmp_path):
     assert bot.tree.sync.await_count == 2
 
 
+def test_command_tree_has_direct_error_handler(tmp_path):
+    bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
+    assert bot.tree.on_error.__self__ is bot
+
+
 def test_download_view_supports_twenty_chapter_selection(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
     chapters = [Chapter(float(i), f"Chapter {i}", f"https://rawkuma.net/chapter-{i}") for i in range(1, 101)]

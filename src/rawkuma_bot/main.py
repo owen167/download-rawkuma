@@ -8,11 +8,14 @@ from rawkuma_bot.database.schema import create_schema
 from rawkuma_bot.utils.logging_setup import setup_logging
 
 
+RELEASE = "v8"
+
+
 def run() -> None:
     settings.prepare_directories()
     setup_logging(settings.log_dir)
     log = logging.getLogger(__name__)
-    log.info("Starting Rawkuma Discord Bot")
+    log.info("Starting Rawkuma Discord Bot release=%s", RELEASE)
     if not settings.discord_token:
         log.error("DISCORD_TOKEN is missing")
         raise SystemExit("DISCORD_TOKEN is required")
