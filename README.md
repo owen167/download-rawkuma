@@ -1,24 +1,25 @@
-# Rawkuma Discord Bot
+# Manga Download Discord Bot
 
-بوت Discord متخصص في تنزيل فصول المانجا من `https://rawkuma.net/` فقط. يستقبل روابط الأعمال أو الفصول عبر Slash Commands، يعرض معلومات العمل وقائمة الفصول، ويضع عمليات التنزيل في Queue مع تحديث تقدّم داخل Embed واحد.
+بوت Discord لتنزيل فصول المانجا من مصدرَي **Rawkuma** و**Naver Webtoon**. يستقبل روابط الأعمال أو الفصول عبر Slash Commands، يعرض معلومات العمل والغلاف وقائمة الفصول، ويضع عمليات التنزيل في Queue مع تحديث تقدّم داخل Embed واحد.
 
 > لا يتجاوز المشروع DRM أو CAPTCHA أو Paywall أو أي حماية وصول. استخدمه فقط مع المحتوى الذي يسمح لك المصدر وحقوقه بتنزيله.
 
-## أمر Discord الوحيد
+## أوامر Discord المدعومة
 
-يحتوي البوت على **أمر واحد فقط**:
+يحتوي البوت على **أمرين فقط**، ولا يسجل أوامر التنزيل القديمة:
 
 ```text
-/download url:<URL>
+/download url:<Rawkuma URL>
+/download-naver url:<Naver Webtoon URL>
 ```
 
-يقبل الأمر رابط عمل Rawkuma أو رابط فصل مباشر. عند استخدام رابط العمل، يجلب البوت المعلومات والغلاف وعدد الفصول، ثم يعرض Embed وقائمة Select Menu متعددة الاختيار. كل صفحة تعرض 20 فصلًا، وتظهر زرا **فصول أحدث** و**فصول أقدم** عند الحاجة. يمكن اختيار فصل واحد أو حتى 20 فصلًا من الصفحة نفسها، ثم يضيفها البوت إلى Queue وينزلها بالتسلسل، فصلًا واحدًا في كل مرة.
+يقبل كل أمر رابط عمل أو رابط فصل مباشر من مصدره. عند استخدام رابط العمل، يجلب البوت المعلومات والغلاف وعدد الفصول، ثم يعرض Embed وقائمة Select Menu متعددة الاختيار. كل صفحة تعرض 20 فصلًا، وتظهر زرا **Newer Chapters** و**Older Chapters** عند الحاجة. يمكن اختيار فصل واحد أو حتى 20 فصلًا من الصفحة نفسها، ثم يضيفها البوت إلى Queue وينزلها بالتسلسل، فصلًا واحدًا في كل مرة.
 
 بعد اختيار الفصول، ينشئ البوت Job للفصل الحالي ويحدّث Embed التقدم أثناء تنزيل الصور. عند اكتمال الفصل، يرفعه إلى GoFile، يرسل Embed نهائيًا يحتوي رابط الفصل، يحذف Embed التقدم والملفات المحلية، ثم يبدأ الفصل التالي. لا توجد أوامر `/chapters` أو `/chapter` أو `/range` أو `/queue` أو `/cancel` أو أوامر Admin في هذا الإصدار.
 
 ## ما تم استخراجه من المصدر
 
-تمت مراجعة مستودع `elboletaire/manga-downloader` عند الإصدار `v1.7.0`. Rawkuma في المصدر الأصلي يمر عبر `grabber/plainhtml.go` باستخدام المحددات `h1[itemprop="name"]` و`#chapter-list [data-chapter-number]` و`[data-image-data] img`. كما تم الحفاظ مفهوميًا على إعادة المحاولة، التنزيل المتوازي المحدود، وعمليات الترتيب حسب رقم الصفحة من `downloader/fetch.go`. لم يتم نسخ تطبيق CLI متعدد المواقع أو الأوامر غير المتعلقة بـ Rawkuma.
+تمت مراجعة مستودع `elboletaire/manga-downloader` عند الإصدار `v1.7.0` لإعادة تنفيذ حدود Rawkuma، كما تمت مراجعة مستودع `ZilverSick/comic.naver-downloader` عند الالتزام `766a528` لإضافة حدود Naver العامة. يعتمد Naver على صفحة القائمة `webtoon/list?titleId=...` وصفحة الحلقة `webtoon/detail?titleId=...&no=...` ووسوم صور العارض. تم تنفيذ `NaverDownloader` مستقلًا، ولم يتم نسخ CLI أو مدير البيئة أو التنزيل المتوازي من المشروع المرجعي. تفاصيل النسب والتراخيص موجودة في `docs/source-review.md` و`THIRD_PARTY_NOTICES.md`.
 
 ## البنية
 
@@ -32,6 +33,7 @@
 │   ├── database/schema.py
 │   ├── downloaders/models.py
 │   ├── downloaders/rawkuma/downloader.py
+│   ├── downloaders/naver/downloader.py
 │   ├── services/archive.py
 │   ├── services/manager.py
 │   └── storage/base.py
@@ -40,6 +42,7 @@
 ├── temp/
 ├── downloads/
 ├── THIRD_PARTY_AGPL-3.0.txt
+├── THIRD_PARTY_MIT_COMIC_NAVER_DOWNLOADER.txt
 └── THIRD_PARTY_NOTICES.md
 ```
 
@@ -82,7 +85,7 @@ python main.py
 
 ## الترخيص
 
-هذا المشروع يعيد تنفيذ حدود Rawkuma المطلوبة اعتمادًا على دراسة سلوك مشروع AGPL-3.0. توجد نسخة الترخيص الكاملة وإشعار المصدر في `THIRD_PARTY_AGPL-3.0.txt` و`THIRD_PARTY_NOTICES.md`. راجع الالتزامات القانونية قبل نشر نسخة معدلة كخدمة شبكة.
+هذا المشروع يعيد تنفيذ حدود Rawkuma وNaver العامة اعتمادًا على دراسة سلوك المشروعين المرجعيين. توجد إشعارات المصدر والتراخيص في `THIRD_PARTY_AGPL-3.0.txt` و`THIRD_PARTY_NOTICES.md`. راجع التزامات AGPL-3.0 وMIT وشروط المصدر قبل نشر نسخة معدلة كخدمة شبكة.
 
 ## الاختبارات
 

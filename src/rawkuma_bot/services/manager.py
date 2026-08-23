@@ -6,11 +6,20 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Protocol
 
 from rawkuma_bot.config.settings import Settings
 from rawkuma_bot.downloaders.models import DownloadJob, JobStatus, MangaInfo, Chapter, Progress
-from rawkuma_bot.downloaders.rawkuma.downloader import RawkumaDownloader
+
+
+class ChapterDownloader(Protocol):
+    async def download_chapter(
+        self,
+        chapter: Chapter,
+        destination: Path,
+        progress: Progress,
+        on_progress: Callable[[], Awaitable[None]] | None = None,
+    ) -> list[Path]: ...
 from rawkuma_bot.storage.base import LocalStorage, StorageAdapter
 from .archive import build_archive
 
@@ -22,7 +31,7 @@ class DownloadManager:
     def __init__(
         self,
         settings: Settings,
-        downloader: RawkumaDownloader,
+        downloader: ChapterDownloader,
         on_progress: ProgressHandler | None = None,
         storage: StorageAdapter | None = None,
     ) -> None:
@@ -35,6 +44,7 @@ class DownloadManager:
         self.workers: list[asyncio.Task] = []
         self._completion_events: dict[str, asyncio.Event] = {}
         self._last_progress_emit: dict[str, float] = {}
+        self._job_downloaders: dict[str, ChapterDownloader] = {}
 
     async def start(self) -> None:
         # Chapter jobs are intentionally sequential: the next chapter starts only
@@ -48,9 +58,17 @@ class DownloadManager:
         await asyncio.gather(*self.workers, return_exceptions=True)
         self.workers.clear()
 
-    async def submit(self, user_id: int, guild_id: int, manga: MangaInfo, chapter: Chapter) -> DownloadJob:
+    async def submit(
+        self,
+        user_id: int,
+        guild_id: int,
+        manga: MangaInfo,
+        chapter: Chapter,
+        downloader: ChapterDownloader | None = None,
+    ) -> DownloadJob:
         job = DownloadJob(user_id, guild_id, manga, chapter, uuid.uuid4().hex, manga.url)
         self.jobs[job.job_id] = job
+        self._job_downloaders[job.job_id] = downloader or self.downloader
         self._completion_events[job.job_id] = asyncio.Event()
         await self.queue.put(job)
         log.info("Job queued id=%s user=%s chapter=%s queue_size=%d", job.job_id, user_id, chapter.number, self.queue.qsize())
@@ -115,7 +133,8 @@ class DownloadManager:
             async def progress_update() -> None:
                 await self._emit(job, throttled=True)
 
-            files = await self.downloader.download_chapter(
+            downloader = self._job_downloaders.get(job.job_id, self.downloader)
+            files = await downloader.download_chapter(
                 job.chapter,
                 temp_job,
                 job.progress,
@@ -142,6 +161,7 @@ class DownloadManager:
 
     def forget_job_record(self, job_id: str) -> None:
         self.jobs.pop(job_id, None)
+        self._job_downloaders.pop(job_id, None)
         self._last_progress_emit.pop(job_id, None)
 
     def active_jobs(self) -> list[DownloadJob]:

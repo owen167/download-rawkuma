@@ -23,13 +23,14 @@ def test_all_user_visible_discord_sends_use_embeds():
         assert any(keyword.arg == "embed" for keyword in node.keywords), ast.unparse(node)
 
 
-def test_command_tree_contains_only_download(tmp_path):
+def test_command_tree_contains_exactly_the_two_supported_commands(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
     bot.tree.add_command(bot.download)
-    assert {command.name for command in bot.tree.get_commands()} == {"download"}
+    bot.tree.add_command(bot.download_naver)
+    assert {command.name for command in bot.tree.get_commands()} == {"download", "download-naver"}
 
 
-def test_guild_mode_registers_download_in_one_scope_only(tmp_path):
+def test_guild_mode_registers_both_commands_in_one_scope_only(tmp_path):
     bot = RawkumaBot(
         Settings(
             temp_dir=tmp_path / "temp",
@@ -44,14 +45,16 @@ def test_guild_mode_registers_download_in_one_scope_only(tmp_path):
 
     guild = discord.Object(id=123456789)
     assert [command.name for command in bot.tree.get_commands()] == []
-    assert [command.name for command in bot.tree.get_commands(guild=guild)] == ["download"]
+    assert [command.name for command in bot.tree.get_commands(guild=guild)] == ["download", "download-naver"]
     assert bot.tree.sync.await_count == 2
 
 
-def test_download_callback_has_discord_signature(tmp_path):
+def test_download_callbacks_have_discord_signatures(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
     assert list(inspect.signature(bot.download.callback).parameters) == ["interaction", "url"]
+    assert list(inspect.signature(bot.download_naver.callback).parameters) == ["interaction", "url"]
     assert bot.download.binding is None
+    assert bot.download_naver.binding is None
 
 
 def test_command_tree_has_direct_error_handler(tmp_path):
@@ -62,7 +65,7 @@ def test_command_tree_has_direct_error_handler(tmp_path):
 def test_download_view_supports_twenty_chapter_selection(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
     chapters = [Chapter(str(i), f"Chapter {i}", f"https://rawkuma.net/chapter-{i}") for i in range(1, 101)]
-    view = ChapterBrowser(bot, MangaInfo("Demo", "https://rawkuma.net/manga/demo"), chapters)
+    view = ChapterBrowser(bot, MangaInfo("Demo", "https://rawkuma.net/manga/demo"), chapters, bot.downloader)
     select = view.children[0]
     assert view.page_count == 5
     assert len(select.options) == 20

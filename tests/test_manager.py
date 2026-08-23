@@ -48,3 +48,31 @@ async def test_selected_chapters_run_sequentially(tmp_path: Path) -> None:
     assert len(manager.workers) == 0
     assert events.index(("completed", "1")) < events.index(("downloading", "2"))
     assert events.index(("completed", "2")) > events.index(("downloading", "2"))
+
+
+@pytest.mark.asyncio
+async def test_each_job_can_use_a_different_downloader(tmp_path: Path) -> None:
+    default_events: list[tuple[str, str]] = []
+    naver_events: list[tuple[str, str]] = []
+    default_downloader = FakeDownloader(default_events)
+    naver_downloader = FakeDownloader(naver_events)
+    settings = Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "output")
+    manager = DownloadManager(settings, default_downloader)
+    await manager.start()
+
+    rawkuma_manga = MangaInfo("Raw", "https://rawkuma.net/manga/demo")
+    naver_manga = MangaInfo("Naver", "https://comic.naver.com/webtoon/list?titleId=807777", source="Naver")
+    raw_job = await manager.submit(1, 2, rawkuma_manga, Chapter("1", "Chapter 1", "https://rawkuma.net/chapter-1"))
+    naver_job = await manager.submit(
+        1,
+        2,
+        naver_manga,
+        Chapter("40", "Chapter 40", "https://comic.naver.com/webtoon/detail?titleId=807777&no=40"),
+        downloader=naver_downloader,
+    )
+    await manager.wait_for_completion(raw_job)
+    await manager.wait_for_completion(naver_job)
+    await manager.stop()
+
+    assert default_events == [("download_started", "1"), ("download_finished", "1")]
+    assert naver_events == [("download_started", "40"), ("download_finished", "40")]

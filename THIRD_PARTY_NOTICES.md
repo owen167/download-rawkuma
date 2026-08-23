@@ -11,3 +11,13 @@
 The upstream project is used as a reference for the Rawkuma extraction and download behavior. Rawkuma is implemented upstream through the generic `grabber/plainhtml.go` selector entry and the page-download retry/sorting behavior in `downloader/fetch.go`. This project reimplements the Rawkuma-only boundary in Python instead of copying the upstream multi-site CLI application, Cobra commands, terminal UI, or unrelated site grabbers.
 
 The complete upstream license text is preserved in `THIRD_PARTY_AGPL-3.0.txt`. Review AGPL-3.0 obligations before distributing modified versions or offering the bot as a network service. This project is not affiliated with or endorsed by manga-downloader or Rawkuma.
+
+## comic.naver-downloader
+
+- **Project:** comic.naver-downloader
+- **Repository:** https://github.com/ZilverSick/comic.naver-downloader
+- **Author:** kikunayar
+- **Revision inspected:** `766a528`
+- **License:** MIT License
+
+The Naver integration reimplements the public list/detail page extraction boundary described by the upstream project. It does not copy the upstream CLI, environment manager, or concurrent batch workflow. The complete MIT copyright and permission notice from the upstream LICENSE is preserved in `THIRD_PARTY_MIT_COMIC_NAVER_DOWNLOADER.txt` and must remain with distributed copies. This project is not affiliated with or endorsed by comic.naver-downloader or Naver.

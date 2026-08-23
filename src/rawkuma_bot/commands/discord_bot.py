@@ -10,7 +10,9 @@ from discord.ext import commands
 from rawkuma_bot.downloaders.models import Chapter, DownloadJob, JobStatus, MangaInfo
 from rawkuma_bot.downloaders.rawkuma.downloader import RawkumaDownloader
 from rawkuma_bot.downloaders.rawkuma.errors import RawkumaError
-from rawkuma_bot.services.manager import DownloadManager
+from rawkuma_bot.downloaders.naver.downloader import NaverDownloader
+from rawkuma_bot.downloaders.naver.errors import NaverError
+from rawkuma_bot.services.manager import ChapterDownloader, DownloadManager
 from rawkuma_bot.storage.gofile import GoFileStorage
 
 if TYPE_CHECKING:
@@ -24,7 +26,7 @@ def info_embed(info: MangaInfo, chapters: list[Chapter]) -> discord.Embed:
     embed = discord.Embed(title=f"📚 {info.title}", colour=discord.Colour.blurple(), url=info.url)
     if info.cover_url:
         embed.set_thumbnail(url=info.cover_url)
-    embed.add_field(name="🌐 Source", value="Rawkuma", inline=True)
+    embed.add_field(name="🌐 Source", value=info.source, inline=True)
     embed.add_field(name="📖 Chapters", value=str(len(chapters)), inline=True)
     embed.add_field(name="📌 Status", value=info.status or "Unknown", inline=True)
     if info.description:
@@ -42,9 +44,18 @@ async def download_command(interaction: discord.Interaction, url: str) -> None:
     await handler(interaction, url)
 
 
+@app_commands.command(name="download-naver", description="Browse a Naver Webtoon, select chapters, and download them")
+@app_commands.describe(url="A Naver Webtoon manga or chapter URL")
+async def download_naver_command(interaction: discord.Interaction, url: str) -> None:
+    handler = getattr(interaction.client, "handle_download_naver", None)
+    if handler is None:
+        raise RuntimeError("Naver download command is not attached to the bot")
+    await handler(interaction, url)
+
+
 def status_embed(title: str, description: str, colour: discord.Colour) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, colour=colour)
-    embed.set_footer(text="Rawkuma Download Bot")
+    embed.set_footer(text="Manga Download Bot")
     return embed
 
 
@@ -86,7 +97,7 @@ def chapter_ready_embed(job: DownloadJob) -> discord.Embed:
     embed.add_field(name="🖼️ Images", value=str(job.image_count), inline=True)
     embed.add_field(name="📦 Size", value=f"{size_mb:.2f} MB", inline=True)
     embed.add_field(name="🔗 Download Link", value=f"[Open on GoFile]({job.upload_url})", inline=False)
-    embed.set_footer(text="Rawkuma Download Bot")
+    embed.set_footer(text="Manga Download Bot")
     return embed
 
 
@@ -106,7 +117,7 @@ class ChapterSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         chapters = [self.browser.page_chapters[int(value)] for value in self.values]
-        await self.browser.bot.enqueue(interaction, self.browser.info, chapters)
+        await self.browser.bot.enqueue(interaction, self.browser.info, chapters, self.browser.downloader)
 
 
 class NewerButton(discord.ui.Button):
@@ -130,9 +141,15 @@ class OlderButton(discord.ui.Button):
 
 
 class ChapterBrowser(discord.ui.View):
-    def __init__(self, bot: "RawkumaBot", info: MangaInfo, chapters: list[Chapter]) -> None:
+    def __init__(
+        self,
+        bot: "RawkumaBot",
+        info: MangaInfo,
+        chapters: list[Chapter],
+        downloader: ChapterDownloader,
+    ) -> None:
         super().__init__(timeout=900)
-        self.bot, self.info = bot, info
+        self.bot, self.info, self.downloader = bot, info, downloader
         self.chapters = sorted(chapters, key=lambda chapter: chapter.sort_key, reverse=True)
         self.page = 0
         self.rebuild()
@@ -164,11 +181,13 @@ class RawkumaBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
         self.settings = settings
         self.downloader = RawkumaDownloader(settings)
+        self.naver_downloader = NaverDownloader(settings)
         self.manager = DownloadManager(settings, self.downloader, self.on_progress, storage=GoFileStorage(settings))
         self.job_messages: dict[str, discord.Message] = {}
         self.job_channels: dict[str, discord.abc.Messageable] = {}
         self._command_cleanup_done = False
         self.download = download_command
+        self.download_naver = download_naver_command
         # CommandTree does not automatically use a Bot method named on_app_command_error.
         # Bind the handler explicitly so signature/sync errors receive an English response.
         self.tree.on_error = self.on_app_command_error
@@ -182,12 +201,13 @@ class RawkumaBot(commands.Bot):
         await self.manager.start()
         configured_guild = self._configured_guild()
         if configured_guild is None:
-            # Global-only mode: clear any stale global commands, then register one command globally.
+            # Global-only mode: clear any stale global commands, then register both supported commands globally.
             log.info("Discord setup started; using global command scope only")
             self.tree.clear_commands(guild=None)
             self.tree.add_command(self.download)
+            self.tree.add_command(self.download_naver)
             await self.tree.sync()
-            log.info("Global command sync completed; registered commands=download")
+            log.info("Global command sync completed; registered commands=download,download-naver")
             return
 
         # Guild-only mode: clear global commands first so Discord cannot show a duplicate.
@@ -196,8 +216,9 @@ class RawkumaBot(commands.Bot):
         await self.tree.sync()
         self.tree.clear_commands(guild=configured_guild)
         self.tree.add_command(self.download, guild=configured_guild)
+        self.tree.add_command(self.download_naver, guild=configured_guild)
         await self.tree.sync(guild=configured_guild)
-        log.info("Guild command sync completed guild_id=%s registered=download", configured_guild.id)
+        log.info("Guild command sync completed guild_id=%s registered=download,download-naver", configured_guild.id)
 
     async def on_ready(self) -> None:
         if self._command_cleanup_done:
@@ -214,8 +235,9 @@ class RawkumaBot(commands.Bot):
             self.tree.clear_commands(guild=guild_object)
             if configured_guild_id is not None and guild.id == configured_guild_id:
                 self.tree.add_command(self.download, guild=guild_object)
+                self.tree.add_command(self.download_naver, guild=guild_object)
             await self.tree.sync(guild=guild_object)
-            registered = "download" if configured_guild_id is not None and guild.id == configured_guild_id else "none"
+            registered = "download,download-naver" if configured_guild_id is not None and guild.id == configured_guild_id else "none"
             log.info("Guild command sync completed guild_id=%s registered=%s", guild.id, registered)
         self._command_cleanup_done = True
 
@@ -280,7 +302,13 @@ class RawkumaBot(commands.Bot):
         self.manager.forget_job_record(job.job_id)
         log.info("Progress Embed deleted and job record forgotten id=%s", job.job_id)
 
-    async def enqueue(self, interaction: discord.Interaction, info: MangaInfo, chapters: list[Chapter]) -> None:
+    async def enqueue(
+        self,
+        interaction: discord.Interaction,
+        info: MangaInfo,
+        chapters: list[Chapter],
+        downloader: ChapterDownloader,
+    ) -> None:
         chapters = chapters[: self.settings.max_chapters_per_job]
         queued_embed = status_embed(
             "Added to Download Queue",
@@ -293,7 +321,7 @@ class RawkumaBot(commands.Bot):
         else:
             await interaction.response.send_message(embed=queued_embed, ephemeral=True)
         for position, chapter in enumerate(chapters, start=1):
-            job = await self.manager.submit(interaction.user.id, interaction.guild_id or 0, info, chapter)
+            job = await self.manager.submit(interaction.user.id, interaction.guild_id or 0, info, chapter, downloader=downloader)
             message = await interaction.followup.send(embed=job_embed(job), wait=True)
             self.job_messages[job.job_id] = message
             self.job_channels[job.job_id] = interaction.channel
@@ -316,17 +344,20 @@ class RawkumaBot(commands.Bot):
             )
 
     async def handle_download(self, interaction: discord.Interaction, url: str) -> None:
-        log.info("Download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
+        log.info("Rawkuma download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
         await interaction.response.defer()
         try:
             if not self.downloader.supports(url):
                 raise RawkumaError("Invalid Rawkuma URL")
             info = await self.downloader.get_manga_info(url)
             if "/chapter" in url.lower():
-                await self.enqueue(interaction, info, [await self.downloader.get_chapter(url)])
+                await self.enqueue(interaction, info, [await self.downloader.get_chapter(url)], self.downloader)
                 return
             chapters = await self.downloader.get_chapters(url)
-            await interaction.followup.send(embed=info_embed(info, chapters), view=ChapterBrowser(self, info, chapters))
+            await interaction.followup.send(
+                embed=info_embed(info, chapters),
+                view=ChapterBrowser(self, info, chapters, self.downloader),
+            )
         except RawkumaError as exc:
             await interaction.followup.send(
                 embed=status_embed("Download Request Error", str(exc), discord.Colour.red()),
@@ -338,6 +369,39 @@ class RawkumaBot(commands.Bot):
                 embed=status_embed(
                     "Source Unavailable",
                     "Rawkuma could not be reached or the page could not be read. Please try again later.",
+                    discord.Colour.red(),
+                ),
+                ephemeral=True,
+            )
+
+    async def handle_download_naver(self, interaction: discord.Interaction, url: str) -> None:
+        log.info("Naver download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
+        await interaction.response.defer()
+        try:
+            if not self.naver_downloader.supports(url):
+                raise NaverError("Invalid Naver Webtoon URL")
+            info = await self.naver_downloader.get_manga_info(url)
+            if self.naver_downloader.is_chapter_url(url):
+                await self.enqueue(interaction, info, [await self.naver_downloader.get_chapter(url)], self.naver_downloader)
+                return
+            if not self.naver_downloader.is_manga_url(url):
+                raise NaverError("Use a Naver Webtoon list or chapter URL")
+            chapters = await self.naver_downloader.get_chapters(url)
+            await interaction.followup.send(
+                embed=info_embed(info, chapters),
+                view=ChapterBrowser(self, info, chapters, self.naver_downloader),
+            )
+        except NaverError as exc:
+            await interaction.followup.send(
+                embed=status_embed("Download Request Error", str(exc), discord.Colour.red()),
+                ephemeral=True,
+            )
+        except Exception:
+            log.exception("Naver /download-naver failed")
+            await interaction.followup.send(
+                embed=status_embed(
+                    "Source Unavailable",
+                    "Naver Webtoon could not be reached or the page could not be read. Please try again later.",
                     discord.Colour.red(),
                 ),
                 ephemeral=True,
