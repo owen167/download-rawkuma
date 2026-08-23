@@ -81,17 +81,21 @@ async def download_naver_command(interaction: discord.Interaction, url: str) -> 
     await handler(interaction, url)
 
 
-async def defer_if_needed(interaction: discord.Interaction, command_name: str) -> None:
+async def defer_if_needed(interaction: discord.Interaction, command_name: str) -> bool:
     if interaction.response.is_done():
         log.debug("Interaction already acknowledged command=%s", command_name)
-        return
+        return True
     try:
         await interaction.response.defer()
     except discord.HTTPException as exc:
         if getattr(exc, "code", None) == 40060:
             log.warning("Interaction was acknowledged before defer command=%s; continuing with followup", command_name)
-            return
+            return True
+        if getattr(exc, "code", None) == 10062:
+            log.error("Interaction expired before defer command=%s; using channel fallback", command_name)
+            return False
         raise
+    return True
 
 
 def status_embed(title: str, description: str, colour: discord.Colour) -> discord.Embed:
@@ -506,25 +510,33 @@ class RawkumaBot(commands.Bot):
 
     async def handle_download_kakao_page(self, interaction: discord.Interaction, url: str) -> None:
         log.info("Kakao Page download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
-        await defer_if_needed(interaction, "download-kakao-page")
+        acknowledged = await defer_if_needed(interaction, "download-kakao-page")
+
+        async def send_result(embed: discord.Embed, view: discord.ui.View | None = None, *, ephemeral: bool = False) -> None:
+            if acknowledged:
+                await interaction.followup.send(embed=embed, view=view, ephemeral=ephemeral)
+                return
+            channel = interaction.channel
+            if channel is None:
+                log.error("Interaction expired and no channel fallback was available")
+                return
+            await channel.send(embed=embed, view=view)
+
         try:
             if not self.kakao_page_downloader.supports(url) or not self.kakao_page_downloader.is_manga_url(url):
                 raise KakaoPageError("Use a Kakao Page content URL")
             info = await self.kakao_page_downloader.get_manga_info(url)
             chapters = await self.kakao_page_downloader.get_chapters(url)
-            await interaction.followup.send(
-                embed=info_embed(info, chapters),
-                view=ChapterBrowser(self, info, chapters, self.kakao_page_downloader),
+            await send_result(
+                info_embed(info, chapters),
+                ChapterBrowser(self, info, chapters, self.kakao_page_downloader),
             )
         except KakaoPageError as exc:
-            await interaction.followup.send(
-                embed=status_embed("Download Request Error", str(exc), discord.Colour.red()),
-                ephemeral=True,
-            )
+            await send_result(status_embed("Download Request Error", str(exc), discord.Colour.red()), ephemeral=True)
         except Exception:
             log.exception("Kakao Page /download-kakao-page failed")
-            await interaction.followup.send(
-                embed=status_embed(
+            await send_result(
+                status_embed(
                     "Source Unavailable",
                     "Kakao Page could not be reached or did not expose free anonymous chapters. Please try again later.",
                     discord.Colour.red(),
