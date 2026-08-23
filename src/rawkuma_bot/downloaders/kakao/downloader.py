@@ -357,7 +357,17 @@ class KakaoDownloader:
                 await on_progress()
             page = await self._ensure_browser()
             try:
-                await page.goto(chapter.url, wait_until="domcontentloaded", timeout=self._timeout_ms())
+                try:
+                    await page.goto(
+                        chapter.url,
+                        wait_until="commit",
+                        timeout=min(self._timeout_ms(), 15_000),
+                    )
+                except PlaywrightTimeoutError:
+                    # Kakao can keep viewer resources open indefinitely. The
+                    # document may still be usable, so continue to the image
+                    # readiness check instead of failing at navigation.
+                    log.warning("Kakao viewer navigation timed out; checking rendered images")
                 await page.wait_for_function(
                     "expected => document.querySelectorAll('div[data-index] img[src^=\\\"blob:http\\\"]').length >= expected",
                     arg=expected,
