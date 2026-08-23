@@ -20,6 +20,10 @@ CHAPTER_HTML = """
 <div data-image-data><img src="https://cdn.example/002.webp"><img src="https://cdn.example/001.webp"></div>
 """
 
+DIRECT_CHAPTER_HTML = """
+<title>Demo Manga Chapter 10.354 – Rawkuma</title>
+"""
+
 
 def test_supports_only_rawkuma() -> None:
     assert RawkumaDownloader.supports("https://rawkuma.net/manga/demo/")
@@ -32,6 +36,10 @@ async def fake_series(url: str, referer: str | None = None) -> str:
 
 async def fake_chapter(url: str, referer: str | None = None) -> str:
     return CHAPTER_HTML
+
+
+async def fake_direct_chapter(url: str, referer: str | None = None) -> str:
+    return DIRECT_CHAPTER_HTML
 
 
 import pytest
@@ -50,6 +58,10 @@ async def test_extracts_title_chapters_and_images(tmp_path: Path) -> None:
     images = await downloader.get_images(chapters[0])
     assert [image.url for image in images] == ["https://cdn.example/002.webp", "https://cdn.example/001.webp"]
     assert images[0].extension == ".webp"
+    downloader._get_text = fake_direct_chapter
+    direct = await downloader.get_chapter("https://rawkuma.net/manga/demo/chapter-10.354123/")
+    assert direct.number == "10.354"
+    assert direct.title == "Chapter 10.354"
 
 
 def test_archive_preserves_nested_layout(tmp_path: Path) -> None:

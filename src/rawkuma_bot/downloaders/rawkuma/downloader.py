@@ -158,8 +158,13 @@ class RawkumaDownloader:
             href = href_node.get("href") if href_node else None
             chapter_url = self._absolute(url, href)
             text = self._clean(row.get_text(" ", strip=True))
-            number_text = row.get("data-chapter-number") or text
-            number = self._chapter_number(number_text, chapter_url)
+            # Rawkuma may put an internal record ID in data-chapter-number or the URL.
+            # The visible row text is authoritative for the chapter label shown to readers.
+            number = self._chapter_number(text)
+            if number is None:
+                number = self._chapter_number(row.get("data-chapter-number") or "")
+            if number is None:
+                number = self._chapter_number("", chapter_url)
             if number is None or not chapter_url.startswith("http"):
                 continue
             key = (number, chapter_url)
@@ -176,7 +181,17 @@ class RawkumaDownloader:
         if not self.supports(url):
             raise InvalidRawkumaURL("Invalid Rawkuma URL")
         if number is None:
-            number = self._chapter_number(url, url)
+            raw_html = await self._get_text(url, referer=self.base_url)
+            soup = self._soup(raw_html)
+            title_text = self._clean(soup.title.get_text(" ", strip=True) if soup.title else "")
+            number = self._chapter_number(title_text)
+            if number is None:
+                for node in soup.select("h1, h2, [data-chapter-number]"):
+                    number = self._chapter_number(self._clean(node.get_text(" ", strip=True)))
+                    if number is not None:
+                        break
+            if number is None:
+                number = self._chapter_number("", url)
         if number is None:
             raise ChapterNotFound("Chapter Not Found")
         return Chapter(number=number, title=f"Chapter {number}", url=url)
