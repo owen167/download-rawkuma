@@ -2,6 +2,8 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+from PIL import Image
+
 from rawkuma_bot.config.settings import Settings
 from rawkuma_bot.downloaders.kakao_page.downloader import KakaoPageDownloader
 from rawkuma_bot.downloaders.kakao_page.errors import ProductNotReadable
@@ -44,12 +46,14 @@ def test_kakao_page_download_builds_html_and_public_image(tmp_path):
     })
     downloader._get_signed_json = AsyncMock(return_value={"contentInfo": {"paragraphList": [
         {"type": "DIV", "text": "Hello", "childParagraphList": [
-            {"type": "IMG", "image": {"imageSrcKey": "public-key", "imageFilename": "page.jpg"}},
+            {"type": "IMG", "image": {"imageSrcKey": "public-key-1", "imageFilename": "page-1.jpg"}},
+            {"type": "IMG", "image": {"imageSrcKey": "public-key-2", "imageFilename": "page-2.jpg"}},
         ]}
     ]}})
 
     async def fake_asset(url, target, referer):
-        target.write_bytes(b"public-image")
+        height = 9000 if target.name == "001.jpg" else 9000
+        Image.new("RGB", (2, height), (255, 255, 255)).save(target, format="JPEG")
 
     downloader._download_asset = fake_asset
     destination = tmp_path / "chapter"
@@ -58,9 +62,14 @@ def test_kakao_page_download_builds_html_and_public_image(tmp_path):
         destination,
         Progress(),
     ))
-    assert [path.name for path in files] == ["chapter.html", "001.jpg"]
+    assert [path.name for path in files] == ["chapter.html", "001.jpg", "002.jpg"]
+    with Image.open(destination / "images" / "001.jpg") as image:
+        assert image.size == (2, 14000)
+    with Image.open(destination / "images" / "002.jpg") as image:
+        assert image.size == (2, 4000)
     assert "Hello" in (destination / "chapter.html").read_text(encoding="utf-8")
     assert 'images/001.jpg' in (destination / "chapter.html").read_text(encoding="utf-8")
+    assert 'images/002.jpg' in (destination / "chapter.html").read_text(encoding="utf-8")
 
 
 def test_kakao_page_unfree_product_is_rejected(tmp_path):
