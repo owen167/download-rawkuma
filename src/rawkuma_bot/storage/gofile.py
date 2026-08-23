@@ -24,7 +24,12 @@ class GoFileStorage:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.timeout = aiohttp.ClientTimeout(total=settings.request_timeout_seconds)
-        self.upload_timeout = aiohttp.ClientTimeout(total=settings.gofile_upload_timeout_seconds)
+        self.upload_timeout = aiohttp.ClientTimeout(
+            total=settings.gofile_upload_timeout_seconds,
+            connect=min(60.0, settings.gofile_upload_timeout_seconds),
+            sock_connect=min(60.0, settings.gofile_upload_timeout_seconds),
+            sock_read=settings.gofile_upload_timeout_seconds,
+        )
         self.account_token = settings.gofile_token or None
 
     @staticmethod
@@ -43,37 +48,52 @@ class GoFileStorage:
         folder_id: str | None,
         token: str | None,
     ) -> dict[str, Any]:
-        last_error: Exception | None = None
-        for attempt in range(1, self.settings.retry_attempts + 1):
-            try:
-                form = aiohttp.FormData()
-                with path.open("rb") as file_handle:
-                    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-                    form.add_field("file", file_handle, filename=path.name, content_type=content_type)
-                    if folder_id:
-                        form.add_field("folderId", folder_id)
-                    headers = {"Authorization": f"Bearer {token}"} if token else {}
-                    async with session.post(self.upload_endpoint, data=form, headers=headers) as response:
-                        payload = await response.json(content_type=None)
-                return self._check_payload(payload)
-            except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ValueError, GoFileUploadError) as exc:
-                last_error = exc
-                if attempt < self.settings.retry_attempts:
-                    await asyncio.sleep(self.settings.retry_backoff_seconds * attempt)
-        raise GoFileUploadError(f"GoFile upload failed for {path.name}") from last_error
+        form = aiohttp.FormData()
+        with path.open("rb") as file_handle:
+            content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            form.add_field("file", file_handle, filename=path.name, content_type=content_type)
+            if folder_id:
+                form.add_field("folderId", folder_id)
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            async with session.post(self.upload_endpoint, data=form, headers=headers) as response:
+                payload = await response.json(content_type=None)
+        return self._check_payload(payload)
 
     async def publish_file(self, path: Path, display_name: str) -> str:
         if not path.is_file():
             raise GoFileUploadError("Chapter archive does not exist")
         token = self.account_token
-        async with aiohttp.ClientSession(timeout=self.upload_timeout) as session:
-            data = await self._upload_file(session, path, None, token)
-        download_page = data.get("downloadPage")
-        if isinstance(download_page, str) and download_page:
-            log.info("GoFile archive upload completed file=%s", path.name)
-            return download_page
-        folder_code = data.get("parentFolderCode")
-        if isinstance(folder_code, str) and folder_code:
-            log.info("GoFile archive upload completed file=%s", path.name)
-            return f"https://gofile.io/d/{folder_code}"
-        raise GoFileUploadError("GoFile did not return a share link")
+        last_error: Exception | None = None
+        attempts = self.settings.retry_attempts
+        for attempt in range(1, attempts + 1):
+            connector = aiohttp.TCPConnector(force_close=True, limit=1, enable_cleanup_closed=True)
+            try:
+                # GoFile may reset a long multipart connection. A fresh session
+                # prevents retries from inheriting the broken connection.
+                async with aiohttp.ClientSession(
+                    timeout=self.upload_timeout,
+                    connector=connector,
+                    trust_env=True,
+                ) as session:
+                    data = await self._upload_file(session, path, None, token)
+                download_page = data.get("downloadPage")
+                if isinstance(download_page, str) and download_page:
+                    log.info("GoFile archive upload completed file=%s attempt=%d", path.name, attempt)
+                    return download_page
+                folder_code = data.get("parentFolderCode")
+                if isinstance(folder_code, str) and folder_code:
+                    log.info("GoFile archive upload completed file=%s attempt=%d", path.name, attempt)
+                    return f"https://gofile.io/d/{folder_code}"
+                raise GoFileUploadError("GoFile did not return a share link")
+            except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ValueError, GoFileUploadError) as exc:
+                last_error = exc
+                log.warning(
+                    "GoFile upload attempt failed file=%s attempt=%d/%d error=%s",
+                    path.name,
+                    attempt,
+                    attempts,
+                    type(exc).__name__,
+                )
+                if attempt < attempts:
+                    await asyncio.sleep(self.settings.retry_backoff_seconds * attempt)
+        raise GoFileUploadError(f"GoFile upload failed for {path.name}") from last_error

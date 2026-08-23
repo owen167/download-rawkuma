@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     retry_attempts: int = Field(default=3, validation_alias="RETRY_ATTEMPTS", ge=1, le=5)
     retry_backoff_seconds: float = Field(default=1.0, validation_alias="RETRY_BACKOFF_SECONDS", gt=0)
     request_timeout_seconds: float = Field(default=30.0, validation_alias="REQUEST_TIMEOUT_SECONDS", gt=0)
-    gofile_upload_timeout_seconds: float = Field(default=300.0, validation_alias="GOFILE_UPLOAD_TIMEOUT_SECONDS", gt=0)
+    gofile_upload_timeout_seconds: float = Field(default=900.0, validation_alias="GOFILE_UPLOAD_TIMEOUT_SECONDS", gt=0)
     discord_max_file_mb: int = Field(default=25, validation_alias="DISCORD_MAX_FILE_MB", gt=0)
     user_agent: str = Field(default="RawkumaDiscordBot/1.0 (+https://rawkuma.net/)", validation_alias="USER_AGENT")
     kakao_browser_timeout_seconds: float = Field(default=45.0, validation_alias="KAKAO_BROWSER_TIMEOUT_SECONDS", gt=0)
