@@ -31,3 +31,13 @@ The Naver integration reimplements the public list/detail page extraction bounda
 - **License:** MIT License
 
 The Kakao integration is an independent Python implementation informed by the upstream API and viewer flow. It uses Kakao's normal anonymous viewer session and only accepts episodes that Kakao marks as `readable`; it does not use private cookies or bypass login, payment, age gates, DRM, CAPTCHA, or other access controls. The complete MIT notice is preserved in `THIRD_PARTY_MIT_IMSEJIN_KAKAO_DOWNLOADER.txt`. This project is not affiliated with or endorsed by kakao-webtoon-downloader, Kakao, or Kakao Entertainment.
+
+## WebToEpub
+
+- **Project:** WebToEpub
+- **Repository:** https://github.com/dteviot/WebToEpub
+- **Author:** David Teviotdale and project contributors
+- **Revision inspected:** `4e8ffeb1`
+- **License:** GNU General Public License v3.0 (GPLv3)
+
+WebToEpub was reviewed as a design reference for the generic parser boundary and its legacy Kakao Page parser. The new Kakao Page integration is an independent Python implementation of the current public BFF/viewer flow; it does not copy the browser extension source, package it, or reuse its GPL code. The project is not affiliated with or endorsed by WebToEpub or its contributors. Review the upstream GPLv3 terms before distributing derivative code.

@@ -1,28 +1,29 @@
 # Manga Download Discord Bot
 
-بوت Discord لتنزيل فصول المانجا من مصادر **Rawkuma** و**Naver Webtoon** و**Kakao Webtoon**. يستقبل روابط الأعمال عبر Slash Commands، يعرض معلومات العمل والغلاف وقائمة الفصول، ويضع عمليات التنزيل في Queue مع تحديث تقدّم داخل Embed واحد.
+بوت Discord لتنزيل فصول المانجا والروايات من مصادر **Rawkuma** و**Naver Webtoon** و**Kakao Webtoon** و**Kakao Page**. يستقبل روابط الأعمال عبر Slash Commands، يعرض معلومات العمل والغلاف وقائمة الفصول، ويضع عمليات التنزيل في Queue مع تحديث تقدّم داخل Embed واحد.
 
 > لا يتجاوز المشروع DRM أو CAPTCHA أو Paywall أو أي حماية وصول. استخدمه فقط مع المحتوى الذي يسمح لك المصدر وحقوقه بتنزيله.
 
 ## أوامر Discord المدعومة
 
-يحتوي البوت على **ثلاثة أوامر فقط**، ولا يسجل أوامر التنزيل القديمة:
+يحتوي البوت على **أربعة أوامر فقط**، ولا يسجل أوامر التنزيل القديمة:
 
 ```text
 /download url:<Rawkuma URL>
 /download-naver url:<Naver Webtoon URL>
 /download-kakao url:<Kakao Webtoon content URL>
+/download-kakao-page url:<Kakao Page content URL>
 ```
 
 يقبل Rawkuma وNaver روابط العمل أو الفصل المباشر. يقبل Kakao رابط العمل بصيغة `https://webtoon.kakao.com/content/<title>/<content_id>`، ثم يجلب المعلومات والغلاف وقائمة الفصول من جلسة متصفح مجهولة. يعرض كل أمر Embed وقائمة Select Menu متعددة الاختيار؛ كل صفحة تعرض 20 فصلًا، وتظهر زرا **Newer Chapters** و**Older Chapters** عند الحاجة. يمكن اختيار فصل واحد أو حتى 20 فصلًا من الصفحة نفسها، ثم يضيفها البوت إلى Queue وينزلها بالتسلسل، فصلًا واحدًا في كل مرة.
 
-في Kakao لا ينزّل البوت إلا الحلقة التي يعرضها Kakao على أنها `readable` في الجلسة العامة. الحلقات المدفوعة أو غير المتاحة للقارئ المجهول يتم رفضها، ولا يستخدم البوت Cookies خاصة أو يتجاوز تسجيل الدخول أو الدفع أو DRM أو CAPTCHA أو أي حماية وصول.
+في Kakao Webtoon لا ينزّل البوت إلا الحلقة التي يعرضها Kakao على أنها `readable` في الجلسة العامة. أما `/download-kakao-page` فهو مسار مستقل للروايات/الصفحات التي يعرضها KakaoPage كمنتجات مجانية؛ يستخدم تدفق القارئ العام المستند إلى نموذج WebToEpub، ويحفظ محتوى الفصل في HTML مع الصور العامة داخل ZIP. المنتجات المدفوعة أو غير المتاحة للقارئ المجهول يتم رفضها، ولا يستخدم البوت Cookies خاصة أو يتجاوز تسجيل الدخول أو الدفع أو DRM أو CAPTCHA أو أي حماية وصول.
 
 بعد اختيار الفصول، ينشئ البوت Job للفصل الحالي ويحدّث Embed التقدم أثناء تنزيل الصور. في مساري Naver وKakao، يضع البوت الصفحات فوق بعضها رأسيًا في صور متتابعة لا يتجاوز ارتفاع كل منها 14,000 بكسل، ثم يعيد تسميتها بالترتيب الصحيح. يحافظ على صيغة كل مجموعة كما وصلت من المصدر، بما في ذلك WebP أو JPEG أو PNG، ولا يحوّلها إلى صيغة أخرى. بعد ذلك ينشئ ZIP ويرفعه إلى GoFile، يرسل Embed نهائيًا يحتوي رابط الفصل، يحذف Embed التقدم والملفات المحلية، ثم يبدأ الفصل التالي. لا توجد أوامر `/chapters` أو `/chapter` أو `/range` أو `/queue` أو `/cancel` أو أوامر Admin في هذا الإصدار.
 
 ## ما تم استخراجه من المصدر
 
-تمت مراجعة مستودع `elboletaire/manga-downloader` عند الإصدار `v1.7.0` لإعادة تنفيذ حدود Rawkuma، ومستودع `ZilverSick/comic.naver-downloader` عند الالتزام `766a528` لإضافة حدود Naver العامة، ومستودع `ImSejin/kakao-webtoon-downloader` عند الالتزام `0d4be7d` لتصميم حدود Kakao. يعتمد Naver على صفحات القائمة والحلقة العامة، بينما يستخدم Kakao واجهات بياناته العامة داخل جلسة المتصفح العادية ويفحص `readable` قبل التنزيل. تم تنفيذ كل مُنزّل في حزمة مستقلة، ولم يتم نسخ تطبيقات CLI أو مدير البيئة أو Cookies أو الأسرار من المشاريع المرجعية. تفاصيل النسب والتراخيص موجودة في `docs/source-review.md` و`THIRD_PARTY_NOTICES.md`.
+تمت مراجعة مستودع `elboletaire/manga-downloader` عند الإصدار `v1.7.0` لإعادة تنفيذ حدود Rawkuma، ومستودع `ZilverSick/comic.naver-downloader` عند الالتزام `766a528` لإضافة حدود Naver العامة، ومستودع `ImSejin/kakao-webtoon-downloader` عند الالتزام `0d4be7d` لتصميم حدود Kakao Webtoon، ومستودع `dteviot/WebToEpub` عند الالتزام `4e8ffeb1` لتصميم حدود Kakao Page العامة. يعتمد Naver على صفحات القائمة والحلقة العامة، بينما يستخدم Kakao واجهات بياناته العامة داخل جلسة المتصفح العادية ويفحص `readable` قبل التنزيل. تم تنفيذ كل مُنزّل في حزمة مستقلة، ولم يتم نسخ تطبيقات CLI أو مدير البيئة أو Cookies أو الأسرار من المشاريع المرجعية. تفاصيل النسب والتراخيص موجودة في `docs/source-review.md` و`THIRD_PARTY_NOTICES.md`.
 
 ## البنية
 
@@ -38,6 +39,7 @@
 │   ├── downloaders/rawkuma/downloader.py
 │   ├── downloaders/naver/downloader.py
 │   ├── downloaders/kakao/downloader.py
+│   ├── downloaders/kakao_page/downloader.py
 │   ├── services/archive.py
 │   ├── services/manager.py
 │   └── storage/base.py
@@ -93,7 +95,7 @@ python main.py
 
 ## الترخيص
 
-هذا المشروع يعيد تنفيذ حدود Rawkuma وNaver وKakao العامة اعتمادًا على دراسة سلوك المشاريع المرجعية. توجد إشعارات المصدر والتراخيص في `THIRD_PARTY_AGPL-3.0.txt` و`THIRD_PARTY_MIT_COMIC_NAVER_DOWNLOADER.txt` و`THIRD_PARTY_MIT_IMSEJIN_KAKAO_DOWNLOADER.txt` و`THIRD_PARTY_NOTICES.md`. راجع التزامات AGPL-3.0 وMIT وشروط المصدر والمنصة قبل نشر نسخة معدلة كخدمة شبكة.
+هذا المشروع يعيد تنفيذ حدود Rawkuma وNaver وKakao العامة اعتمادًا على دراسة سلوك المشاريع المرجعية، ويستخدم أفكار واجهة parser العامة من WebToEpub دون نسخ كود الامتداد. توجد إشعارات المصدر والتراخيص في `THIRD_PARTY_AGPL-3.0.txt` و`THIRD_PARTY_MIT_COMIC_NAVER_DOWNLOADER.txt` و`THIRD_PARTY_MIT_IMSEJIN_KAKAO_DOWNLOADER.txt` و`THIRD_PARTY_NOTICES.md`. راجع التزامات AGPL-3.0 وMIT وشروط المصدر والمنصة قبل نشر نسخة معدلة كخدمة شبكة.
 
 ## الاختبارات
 

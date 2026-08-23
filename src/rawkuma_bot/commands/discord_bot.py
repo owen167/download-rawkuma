@@ -16,6 +16,8 @@ from rawkuma_bot.downloaders.naver.downloader import NaverDownloader
 from rawkuma_bot.downloaders.naver.errors import NaverError
 from rawkuma_bot.downloaders.kakao.downloader import KakaoDownloader
 from rawkuma_bot.downloaders.kakao.errors import KakaoError
+from rawkuma_bot.downloaders.kakao_page.downloader import KakaoPageDownloader
+from rawkuma_bot.downloaders.kakao_page.errors import KakaoPageError
 from rawkuma_bot.services.manager import ChapterDownloader, DownloadManager
 from rawkuma_bot.storage.gofile import GoFileStorage
 
@@ -30,7 +32,7 @@ EMBED_FOOTER = "Made with ❤️ by OWEN"
 def info_embed(info: MangaInfo, chapters: list[Chapter]) -> discord.Embed:
     embed = discord.Embed(title=f"📚 {info.title}", colour=discord.Colour.blurple(), url=info.url)
     if info.cover_url:
-        if info.source in {"Naver", "Kakao"}:
+        if info.source in {"Naver", "Kakao", "Kakao Page"}:
             embed.set_image(url=info.cover_url)
         else:
             embed.set_thumbnail(url=info.cover_url)
@@ -58,6 +60,15 @@ async def download_kakao_command(interaction: discord.Interaction, url: str) -> 
     handler = getattr(interaction.client, "handle_download_kakao", None)
     if handler is None:
         raise RuntimeError("Kakao download command is not attached to the bot")
+    await handler(interaction, url)
+
+
+@app_commands.command(name="download-kakao-page", description="Browse a Kakao Page work, select free chapters, and download them")
+@app_commands.describe(url="A Kakao Page content URL")
+async def download_kakao_page_command(interaction: discord.Interaction, url: str) -> None:
+    handler = getattr(interaction.client, "handle_download_kakao_page", None)
+    if handler is None:
+        raise RuntimeError("Kakao Page download command is not attached to the bot")
     await handler(interaction, url)
 
 
@@ -93,7 +104,8 @@ def job_embed(job: DownloadJob) -> discord.Embed:
     embed = discord.Embed(title=title, colour=colour)
     embed.add_field(name="📚 Manga", value=job.manga.title, inline=True)
     embed.add_field(name="📖 Chapter", value=job.chapter.number, inline=True)
-    embed.add_field(name="🖼️ Images", value=f"{progress.current} / {progress.total or '?'}", inline=True)
+    asset_label = "📄 Files" if job.manga.source == "Kakao Page" else "🖼️ Images"
+    embed.add_field(name=asset_label, value=f"{progress.current} / {progress.total or '?'}", inline=True)
     embed.add_field(name="📊 Progress", value=f"{bar} {progress.percent:.0f}%", inline=False)
     embed.add_field(name="⏱️ Time", value=f"{progress.elapsed_seconds:.0f}s", inline=True)
     embed.add_field(name="⚡ Speed", value=f"{progress.speed_bps / 1024 / 1024:.2f} MB/s", inline=True)
@@ -112,7 +124,8 @@ def chapter_ready_embed(job: DownloadJob) -> discord.Embed:
         colour=discord.Colour.green(),
     )
     embed.add_field(name="📖 Chapter", value=job.chapter.title, inline=True)
-    embed.add_field(name="🖼️ Images", value=str(job.image_count), inline=True)
+    asset_label = "📄 Files" if job.manga.source == "Kakao Page" else "🖼️ Images"
+    embed.add_field(name=asset_label, value=str(job.image_count), inline=True)
     embed.add_field(name="📦 Size", value=f"{size_mb:.2f} MB", inline=True)
     embed.add_field(name="🔗 Download Link", value=f"[Open on GoFile]({job.upload_url})", inline=False)
     embed.set_footer(text=EMBED_FOOTER)
@@ -201,6 +214,7 @@ class RawkumaBot(commands.Bot):
         self.downloader = RawkumaDownloader(settings)
         self.naver_downloader = NaverDownloader(settings)
         self.kakao_downloader = KakaoDownloader(settings)
+        self.kakao_page_downloader = KakaoPageDownloader(settings)
         self.manager = DownloadManager(settings, self.downloader, self.on_progress, storage=GoFileStorage(settings))
         self.job_messages: dict[str, discord.Message] = {}
         self.job_channels: dict[str, discord.abc.Messageable] = {}
@@ -208,6 +222,7 @@ class RawkumaBot(commands.Bot):
         self.download = download_command
         self.download_naver = download_naver_command
         self.download_kakao = download_kakao_command
+        self.download_kakao_page = download_kakao_page_command
         # CommandTree does not automatically use a Bot method named on_app_command_error.
         # Bind the handler explicitly so signature/sync errors receive an English response.
         self.tree.on_error = self.on_app_command_error
@@ -227,8 +242,9 @@ class RawkumaBot(commands.Bot):
             self.tree.add_command(self.download)
             self.tree.add_command(self.download_naver)
             self.tree.add_command(self.download_kakao)
+            self.tree.add_command(self.download_kakao_page)
             await self.tree.sync()
-            log.info("Global command sync completed; registered commands=download,download-naver,download-kakao")
+            log.info("Global command sync completed; registered commands=download,download-naver,download-kakao,download-kakao-page")
             return
 
         # Guild-only mode: clear global commands first so Discord cannot show a duplicate.
@@ -239,8 +255,9 @@ class RawkumaBot(commands.Bot):
         self.tree.add_command(self.download, guild=configured_guild)
         self.tree.add_command(self.download_naver, guild=configured_guild)
         self.tree.add_command(self.download_kakao, guild=configured_guild)
+        self.tree.add_command(self.download_kakao_page, guild=configured_guild)
         await self.tree.sync(guild=configured_guild)
-        log.info("Guild command sync completed guild_id=%s registered=download,download-naver,download-kakao", configured_guild.id)
+        log.info("Guild command sync completed guild_id=%s registered=download,download-naver,download-kakao,download-kakao-page", configured_guild.id)
 
     async def on_ready(self) -> None:
         if self._command_cleanup_done:
@@ -259,8 +276,9 @@ class RawkumaBot(commands.Bot):
                 self.tree.add_command(self.download, guild=guild_object)
                 self.tree.add_command(self.download_naver, guild=guild_object)
                 self.tree.add_command(self.download_kakao, guild=guild_object)
+                self.tree.add_command(self.download_kakao_page, guild=guild_object)
             await self.tree.sync(guild=guild_object)
-            registered = "download,download-naver,download-kakao" if configured_guild_id is not None and guild.id == configured_guild_id else "none"
+            registered = "download,download-naver,download-kakao,download-kakao-page" if configured_guild_id is not None and guild.id == configured_guild_id else "none"
             log.info("Guild command sync completed guild_id=%s registered=%s", guild.id, registered)
         self._command_cleanup_done = True
 
@@ -290,6 +308,7 @@ class RawkumaBot(commands.Bot):
         log.info("Shutting down Rawkuma Discord Bot")
         await self.manager.stop()
         await self.kakao_downloader.close()
+        await self.kakao_page_downloader.close()
         await super().close()
 
     async def on_progress(self, job: DownloadJob) -> None:
@@ -460,6 +479,35 @@ class RawkumaBot(commands.Bot):
                 embed=status_embed(
                     "Source Unavailable",
                     "Kakao could not be reached or did not expose readable chapters. Please try again later.",
+                    discord.Colour.red(),
+                ),
+                ephemeral=True,
+            )
+
+
+    async def handle_download_kakao_page(self, interaction: discord.Interaction, url: str) -> None:
+        log.info("Kakao Page download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
+        await interaction.response.defer()
+        try:
+            if not self.kakao_page_downloader.supports(url) or not self.kakao_page_downloader.is_manga_url(url):
+                raise KakaoPageError("Use a Kakao Page content URL")
+            info = await self.kakao_page_downloader.get_manga_info(url)
+            chapters = await self.kakao_page_downloader.get_chapters(url)
+            await interaction.followup.send(
+                embed=info_embed(info, chapters),
+                view=ChapterBrowser(self, info, chapters, self.kakao_page_downloader),
+            )
+        except KakaoPageError as exc:
+            await interaction.followup.send(
+                embed=status_embed("Download Request Error", str(exc), discord.Colour.red()),
+                ephemeral=True,
+            )
+        except Exception:
+            log.exception("Kakao Page /download-kakao-page failed")
+            await interaction.followup.send(
+                embed=status_embed(
+                    "Source Unavailable",
+                    "Kakao Page could not be reached or did not expose free anonymous chapters. Please try again later.",
                     discord.Colour.red(),
                 ),
                 ephemeral=True,

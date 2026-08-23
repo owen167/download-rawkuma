@@ -35,3 +35,9 @@
 أثناء المراجعة الحية، أعادت واجهة بيانات المحتوى HTTP 200، وأعادت واجهة الحلقات الحديثة HTTP 200 داخل جلسة المتصفح المجهولة، بينما أعادت الواجهة القديمة HTTP 403 دون جلسة. لذلك تم اعتماد واجهة v2 داخل المتصفح الطبيعي فقط، مع إبقاء fallback الآمن هو إبلاغ المستخدم بأن المصدر غير متاح إذا تغيّر Kakao أو منع الجلسة المجهولة. يتطلب هذا المسار Playwright ومتصفح Chromium متاحًا في بيئة التشغيل.
 
 لم يتم نسخ تطبيق Electron أو Cookies الثابتة أو كود المشروع المرجعي كاملًا. كما لم يتم تعديل مُنزّلي Rawkuma وNaver؛ Kakao موجود في حزمة `downloaders/kakao` مستقلة، ويرتبط بالأمر `/download-kakao` فقط.
+
+## Kakao Page / WebToEpub source review
+
+تمت مراجعة مستودع [dteviot/WebToEpub](https://github.com/dteviot/WebToEpub) عند الالتزام `4e8ffeb1`، وهو مشروع GPLv3. يوجد في المشروع `plugin/js/parsers/KakaoParser.js` قديم يوضح عقد parser العام: استخراج metadata، اكتشاف روابط الفصول، واستخراج محتوى الفصل. هذا parser يستهدف نطاقات Kakao Page Stage القديمة `pagestage.kakao.com`، وليس مسار Kakao Webtoon الحالي.
+
+لذلك أُنشئ مسار `/download-kakao-page` مستقلًا في Python بدل نسخ امتداد WebToEpub. يعتمد التنفيذ الحالي على واجهات KakaoPage العامة الحديثة تحت `bff-page.kakao.com`: metadata وقائمة المنتجات، ثم `viewer/data` للمنتجات التي يعلنها Kakao كـ`is_free`. يتبع البوت فقط روابط JSON والصور الموقعة التي يعيدها القارئ المجهول طبيعيًا، ويضع المحتوى في HTML داخل ZIP الفصل. لا يستخدم Cookies أو تسجيل دخول أو شراء أو inventory unlock أو فك تشفير أو تجاوز DRM أو CAPTCHA أو age gate. إذا لم يُعد القارئ محتوى عامًا صالحًا، يُرفض المنتج بدل محاولة فتحه بوسيلة أخرى.
