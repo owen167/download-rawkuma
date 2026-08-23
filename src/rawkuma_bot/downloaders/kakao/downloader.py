@@ -74,6 +74,15 @@ class KakaoDownloader:
     def _viewer_url(cls, seo_id: str, episode_id: int) -> str:
         return f"{cls.VIEWER_ROOT}/{seo_id}/{episode_id}"
 
+    @staticmethod
+    def _cover_url(content: dict[str, Any]) -> str | None:
+        cover = content.get("thumbnailImage") or content.get("sharingThumbnailImage") or content.get("backgroundImage")
+        if not isinstance(cover, str) or not cover:
+            return None
+        if "kakaopagecdn.com" in cover and "." not in cover.rsplit("/", 1)[-1]:
+            return f"{cover}.webp"
+        return cover
+
     async def _ensure_browser(self) -> Page:
         if self._page and not self._page.is_closed():
             return self._page
@@ -179,7 +188,7 @@ class KakaoDownloader:
                 title=str(content.get("title") or "Kakao Webtoon"),
                 url=url,
                 source="Kakao",
-                cover_url=content.get("thumbnailImage") or content.get("sharingThumbnailImage") or content.get("backgroundImage"),
+                cover_url=self._cover_url(content),
                 status=content.get("status") or "Unknown",
                 description=content.get("synopsis"),
             )
@@ -211,6 +220,8 @@ class KakaoDownloader:
                 for episode in episodes:
                     if not isinstance(episode, dict) or not episode.get("id") or not episode.get("seoId"):
                         continue
+                    if not episode.get("readable"):
+                        continue
                     episode_id = int(episode["id"])
                     chapters.append(
                         Chapter(
@@ -225,7 +236,7 @@ class KakaoDownloader:
                 if offset > 50_000:
                     break
         if not chapters:
-            raise ChapterNotFound("No Kakao chapters were available")
+            raise ChapterNotFound("No publicly readable Kakao chapters were available")
         return chapters
 
     async def get_chapter(self, url: str) -> Chapter:

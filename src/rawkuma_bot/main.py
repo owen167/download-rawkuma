@@ -8,7 +8,7 @@ from rawkuma_bot.database.schema import create_schema
 from rawkuma_bot.utils.logging_setup import setup_logging
 
 
-RELEASE = "v24"
+RELEASE = "v25"
 
 
 def run() -> None:

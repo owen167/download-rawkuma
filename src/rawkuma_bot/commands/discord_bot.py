@@ -27,7 +27,7 @@ PAGE_SIZE = 20
 def info_embed(info: MangaInfo, chapters: list[Chapter]) -> discord.Embed:
     embed = discord.Embed(title=f"📚 {info.title}", colour=discord.Colour.blurple(), url=info.url)
     if info.cover_url:
-        if info.source == "Naver":
+        if info.source in {"Naver", "Kakao"}:
             embed.set_image(url=info.cover_url)
         else:
             embed.set_thumbnail(url=info.cover_url)

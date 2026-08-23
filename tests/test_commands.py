@@ -72,6 +72,13 @@ def test_naver_info_embed_uses_full_cover_image(tmp_path):
     assert not embed.thumbnail.url
 
 
+def test_kakao_info_embed_uses_full_cover_image(tmp_path):
+    info = MangaInfo("Kakao Demo", "https://webtoon.kakao.com/content/demo/1776", source="Kakao", cover_url="https://cdn.kakao.example/cover.webp")
+    embed = info_embed(info, [])
+    assert embed.image.url == "https://cdn.kakao.example/cover.webp"
+    assert not embed.thumbnail.url
+
+
 def test_download_view_supports_twenty_chapter_selection(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
     chapters = [Chapter(str(i), f"Chapter {i}", f"https://rawkuma.net/chapter-{i}") for i in range(1, 101)]

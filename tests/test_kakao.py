@@ -26,7 +26,15 @@ def test_kakao_url_classification(tmp_path):
     assert not downloader.supports("https://example.com/content/demo/1776")
 
 
-def test_kakao_chapter_number_uses_visible_title():
+def test_kakao_cover_url_adds_cdn_webp_suffix(tmp_path):
+    downloader = make_downloader(tmp_path)
+    raw = "https://kr-a.kakaopagecdn.com/P/C/1776/sharing/2x/cover-id"
+    assert downloader._cover_url({"thumbnailImage": raw}) == raw + ".webp"
+    ready = raw + ".webp"
+    assert downloader._cover_url({"thumbnailImage": ready}) == ready
+
+
+def test_kakao_chapter_number_uses_visible_title(tmp_path):
     assert KakaoDownloader._chapter_number({"title": "0화", "no": 1}) == "0"
     assert KakaoDownloader._chapter_number({"title": "12화 특별편", "no": 13}) == "12"
     assert KakaoDownloader._chapter_number({"title": "무료 공개", "no": 13}) == "13"
@@ -44,7 +52,10 @@ def test_kakao_episode_listing_uses_public_v2_endpoint(tmp_path):
     downloader = make_downloader(tmp_path)
     downloader._api_json = AsyncMock(
         side_effect=[
-            {"data": {"episodes": [{"id": 10, "seoId": "demo-001", "no": 1, "title": "0화", "readable": True}]}},
+            {"data": {"episodes": [
+                {"id": 10, "seoId": "demo-001", "no": 1, "title": "0화", "readable": True},
+                {"id": 11, "seoId": "demo-002", "no": 2, "title": "1화", "readable": False},
+            ]}},
         ]
     )
     chapters = asyncio.run(downloader.get_chapters("https://webtoon.kakao.com/content/demo/1776"))
