@@ -32,6 +32,12 @@ def info_embed(info: MangaInfo, chapters: list[Chapter]) -> discord.Embed:
     return embed
 
 
+def status_embed(title: str, description: str, colour: discord.Colour) -> discord.Embed:
+    embed = discord.Embed(title=title, description=description, colour=colour)
+    embed.set_footer(text="Rawkuma Download Bot")
+    return embed
+
+
 def job_embed(job: DownloadJob) -> discord.Embed:
     progress = job.progress
     filled = int(16 * progress.percent / 100) if progress.total else 0
@@ -186,14 +192,22 @@ class RawkumaBot(commands.Bot):
     async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         log.error("Slash command failed name=%s", getattr(interaction.command, "qualified_name", "unknown"), exc_info=(type(error), error, error.__traceback__))
         if isinstance(error, app_commands.CommandSignatureMismatch):
-            message = "❌ This command registration is outdated. Please restart the bot with the latest version."
+            embed = status_embed(
+                "Command Registration Error",
+                "This command registration is outdated. Please restart the bot with the latest version.",
+                discord.Colour.red(),
+            )
         else:
-            message = "❌ The command failed. Check the bot logs for details."
+            embed = status_embed(
+                "Command Error",
+                "The command failed. Please check the bot logs for details.",
+                discord.Colour.red(),
+            )
         try:
             if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
             else:
-                await interaction.response.send_message(message, ephemeral=True)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
         except discord.HTTPException:
             log.exception("Could not send slash command error response")
 
@@ -229,12 +243,16 @@ class RawkumaBot(commands.Bot):
 
     async def enqueue(self, interaction: discord.Interaction, info: MangaInfo, chapters: list[Chapter]) -> None:
         chapters = chapters[: self.settings.max_chapters_per_job]
-        text = f"⏳ Added {len(chapters)} chapter(s) to the download queue."
+        queued_embed = status_embed(
+            "Added to Download Queue",
+            f"{len(chapters)} chapter(s) have been added to the download queue.",
+            discord.Colour.gold(),
+        )
         log.info("Enqueue request user=%s guild=%s chapters=%d", interaction.user.id, interaction.guild_id or 0, len(chapters))
         if interaction.response.is_done():
-            await interaction.followup.send(text, ephemeral=True)
+            await interaction.followup.send(embed=queued_embed, ephemeral=True)
         else:
-            await interaction.response.send_message(text, ephemeral=True)
+            await interaction.response.send_message(embed=queued_embed, ephemeral=True)
         for chapter in chapters:
             job = await self.manager.submit(interaction.user.id, interaction.guild_id or 0, info, chapter)
             message = await interaction.followup.send(embed=job_embed(job), wait=True)
@@ -248,7 +266,7 @@ class RawkumaBot(commands.Bot):
         await interaction.response.defer()
         try:
             if not self.downloader.supports(url):
-                raise RawkumaError("❌ Invalid Rawkuma URL")
+                raise RawkumaError("Invalid Rawkuma URL")
             info = await self.downloader.get_manga_info(url)
             if "/chapter" in url.lower():
                 await self.enqueue(interaction, info, [await self.downloader.get_chapter(url)])
@@ -256,7 +274,17 @@ class RawkumaBot(commands.Bot):
             chapters = await self.downloader.get_chapters(url)
             await interaction.followup.send(embed=info_embed(info, chapters), view=ChapterBrowser(self, info, chapters))
         except RawkumaError as exc:
-            await interaction.followup.send(f"❌ {exc}", ephemeral=True)
+            await interaction.followup.send(
+                embed=status_embed("Download Request Error", str(exc), discord.Colour.red()),
+                ephemeral=True,
+            )
         except Exception:
             log.exception("Rawkuma /download failed")
-            await interaction.followup.send("❌ Source Unavailable", ephemeral=True)
+            await interaction.followup.send(
+                embed=status_embed(
+                    "Source Unavailable",
+                    "Rawkuma could not be reached or the page could not be read. Please try again later.",
+                    discord.Colour.red(),
+                ),
+                ephemeral=True,
+            )

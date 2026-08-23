@@ -1,4 +1,6 @@
+import ast
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import discord
@@ -6,6 +8,18 @@ import discord
 from rawkuma_bot.commands.discord_bot import ChapterBrowser, RawkumaBot
 from rawkuma_bot.config.settings import Settings
 from rawkuma_bot.downloaders.models import Chapter, MangaInfo
+
+
+def test_all_user_visible_discord_sends_use_embeds():
+    source = Path(__file__).parents[1] / "src" / "rawkuma_bot" / "commands" / "discord_bot.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    send_methods = {"send_message", "send", "edit_message", "edit"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr not in send_methods:
+            continue
+        assert any(keyword.arg == "embed" for keyword in node.keywords), ast.unparse(node)
 
 
 def test_command_tree_contains_only_download(tmp_path):
