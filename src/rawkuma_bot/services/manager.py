@@ -26,6 +26,7 @@ class DownloadManager:
         self.jobs: dict[str, DownloadJob] = {}
         self.workers: list[asyncio.Task] = []
         self._completion_events: dict[str, asyncio.Event] = {}
+        self._last_progress_emit: dict[str, float] = {}
 
     async def start(self) -> None:
         # Chapter jobs are intentionally sequential: the next chapter starts only
@@ -62,9 +63,16 @@ class DownloadManager:
         self._completion_events.pop(job.job_id, None)
         return job
 
-    async def _emit(self, job: DownloadJob) -> None:
-        if self.on_progress:
-            await self.on_progress(job)
+    async def _emit(self, job: DownloadJob, *, throttled: bool = False) -> None:
+        if not self.on_progress:
+            return
+        if throttled and job.progress.current < job.progress.total:
+            now = asyncio.get_running_loop().time()
+            last = self._last_progress_emit.get(job.job_id, 0.0)
+            if now - last < 0.8:
+                return
+            self._last_progress_emit[job.job_id] = now
+        await self.on_progress(job)
 
     async def _worker(self) -> None:
         while True:
@@ -96,7 +104,15 @@ class DownloadManager:
         await self._emit(job)
         temp_job = self.settings.temp_dir / f"job_{job.job_id}" / f"chapter_{job.chapter.number}"
         try:
-            files = await self.downloader.download_chapter(job.chapter, temp_job, job.progress)
+            async def progress_update() -> None:
+                await self._emit(job, throttled=True)
+
+            files = await self.downloader.download_chapter(
+                job.chapter,
+                temp_job,
+                job.progress,
+                on_progress=progress_update,
+            )
             job.image_count = len(files)
             job.status = JobStatus.PROCESSING
             await self._emit(job)

@@ -6,6 +6,7 @@ import logging
 import re
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
+from typing import Awaitable, Callable
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -243,9 +244,17 @@ class RawkumaDownloader:
         suffix = Path(urlparse(url).path).suffix.lower()
         return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"} else ".jpg"
 
-    async def download_chapter(self, chapter: Chapter, destination: Path, progress: Progress) -> list[Path]:
+    async def download_chapter(
+        self,
+        chapter: Chapter,
+        destination: Path,
+        progress: Progress,
+        on_progress: Callable[[], Awaitable[None]] | None = None,
+    ) -> list[Path]:
         images = await self.get_images(chapter)
         progress.total = len(images)
+        if on_progress:
+            await on_progress()
         destination.mkdir(parents=True, exist_ok=True)
         semaphore = asyncio.Semaphore(self.settings.max_concurrent_pages)
         downloaded: list[Path | None] = [None] * len(images)
@@ -271,6 +280,8 @@ class RawkumaDownloader:
                         downloaded[index] = target
                         progress.current += 1
                         progress.update_speed()
+                        if on_progress:
+                            await on_progress()
                         return
                     except (aiohttp.ClientError, asyncio.TimeoutError, OSError, RawkumaError) as exc:
                         last_error = exc

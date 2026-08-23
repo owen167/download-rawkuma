@@ -55,6 +55,8 @@ def job_embed(job: DownloadJob) -> discord.Embed:
         title, colour = "✅ Download Completed", discord.Colour.green()
     elif job.status == JobStatus.FAILED:
         title, colour = "❌ Download Failed", discord.Colour.red()
+    elif job.status == JobStatus.QUEUED:
+        title, colour = "⏳ Queued for Download", discord.Colour.gold()
     else:
         title, colour = "📥 Downloading Chapter", discord.Colour.blurple()
     embed = discord.Embed(title=title, colour=colour)
@@ -268,6 +270,9 @@ class RawkumaBot(commands.Bot):
             message = await interaction.followup.send(embed=job_embed(job), wait=True)
             self.job_messages[job.job_id] = message
             self.job_channels[job.job_id] = interaction.channel
+            # The worker can start between submit() and message creation; refresh now
+            # so the user sees the current status and image total immediately.
+            await self.on_progress(job)
             log.info(
                 "Sequential chapter started position=%d total=%d chapter=%s",
                 position,

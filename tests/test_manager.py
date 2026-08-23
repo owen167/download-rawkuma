@@ -11,13 +11,17 @@ class FakeDownloader:
     def __init__(self, events: list[tuple[str, str]]) -> None:
         self.events = events
 
-    async def download_chapter(self, chapter: Chapter, destination: Path, progress: Progress) -> list[Path]:
+    async def download_chapter(self, chapter: Chapter, destination: Path, progress: Progress, on_progress=None) -> list[Path]:
         self.events.append(("download_started", chapter.number))
         destination.mkdir(parents=True, exist_ok=True)
         page = destination / "001.webp"
         page.write_bytes(b"page")
         progress.total = 1
+        if on_progress:
+            await on_progress()
         progress.current = 1
+        if on_progress:
+            await on_progress()
         self.events.append(("download_finished", chapter.number))
         return [page]
 
