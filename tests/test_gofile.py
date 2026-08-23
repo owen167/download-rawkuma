@@ -7,31 +7,22 @@ from rawkuma_bot.storage.gofile import GoFileStorage
 
 
 @pytest.mark.asyncio
-async def test_gofile_publish_directory_returns_folder_page(tmp_path: Path, monkeypatch) -> None:
-    first = tmp_path / "001.webp"
-    second = tmp_path / "002.webp"
-    first.write_bytes(b"one")
-    second.write_bytes(b"two")
+async def test_gofile_publish_file_returns_download_page(tmp_path: Path, monkeypatch) -> None:
+    archive = tmp_path / "Chapter_29.zip"
+    archive.write_bytes(b"zip-data")
     storage = GoFileStorage(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "out"))
-    uploaded: list[str] = []
+    uploaded: list[tuple[str, str | None]] = []
 
     async def fake_upload(session, path, folder_id, token):
-        uploaded.append(path.name)
-        if len(uploaded) == 1:
-            return {"parentFolder": "folder-id", "parentFolderCode": "share-code", "guestToken": "guest-token"}
-        return {"parentFolder": "folder-id"}
-
-    async def fake_rename(session, folder_id, folder_name, token):
-        assert folder_id == "folder-id"
-        assert folder_name == "Chapter_29"
+        uploaded.append((path.name, token))
+        return {"downloadPage": "https://gofile.io/d/share-code"}
 
     monkeypatch.setattr(storage, "_upload_file", fake_upload)
-    monkeypatch.setattr(storage, "_rename_folder", fake_rename)
 
-    link = await storage.publish_directory(tmp_path, "Chapter_29")
+    link = await storage.publish_file(archive, archive.name)
 
     assert link == "https://gofile.io/d/share-code"
-    assert uploaded == ["001.webp", "002.webp"]
+    assert uploaded == [("Chapter_29.zip", None)]
 
 
 def test_gofile_rejects_error_envelope() -> None:

@@ -61,37 +61,18 @@ class GoFileStorage:
                     await asyncio.sleep(self.settings.retry_backoff_seconds * attempt)
         raise GoFileUploadError(f"GoFile upload failed for {path.name}") from last_error
 
-    async def _rename_folder(self, session: aiohttp.ClientSession, folder_id: str, folder_name: str, token: str | None) -> None:
-        if not token:
-            return
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        payload = {"attribute": "name", "attributeValue": folder_name}
-        async with session.put(f"{self.api_endpoint}/contents/{folder_id}/update", json=payload, headers=headers) as response:
-            result = await response.json(content_type=None)
-        self._check_payload(result)
-
-    async def publish_directory(self, directory: Path, display_name: str) -> str:
-        files = sorted(path for path in directory.iterdir() if path.is_file())
-        if not files:
-            raise GoFileUploadError("Chapter has no image files")
-
-        folder_id: str | None = None
-        folder_code: str | None = None
+    async def publish_file(self, path: Path, display_name: str) -> str:
+        if not path.is_file():
+            raise GoFileUploadError("Chapter archive does not exist")
         token = self.account_token
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
-            for index, path in enumerate(files):
-                data = await self._upload_file(session, path, folder_id, token)
-                if index == 0:
-                    folder_id = data.get("parentFolder")
-                    folder_code = data.get("parentFolderCode")
-                    token = token or data.get("guestToken")
-                    if folder_id:
-                        await self._rename_folder(session, folder_id, display_name, token)
-                log.info("GoFile upload completed file=%s position=%d total=%d", path.name, index + 1, len(files))
-
-        if folder_code:
-            return f"https://gofile.io/d/{folder_code}"
+            data = await self._upload_file(session, path, None, token)
         download_page = data.get("downloadPage")
         if isinstance(download_page, str) and download_page:
+            log.info("GoFile archive upload completed file=%s", path.name)
             return download_page
+        folder_code = data.get("parentFolderCode")
+        if isinstance(folder_code, str) and folder_code:
+            log.info("GoFile archive upload completed file=%s", path.name)
+            return f"https://gofile.io/d/{folder_code}"
         raise GoFileUploadError("GoFile did not return a share link")

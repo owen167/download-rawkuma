@@ -12,6 +12,7 @@ from rawkuma_bot.config.settings import Settings
 from rawkuma_bot.downloaders.models import DownloadJob, JobStatus, MangaInfo, Chapter, Progress
 from rawkuma_bot.downloaders.rawkuma.downloader import RawkumaDownloader
 from rawkuma_bot.storage.base import LocalStorage, StorageAdapter
+from .archive import build_archive
 
 log = logging.getLogger(__name__)
 ProgressHandler = Callable[[DownloadJob], Awaitable[None]]
@@ -125,11 +126,13 @@ class DownloadManager:
             await self._emit(job)
             job.status = JobStatus.PACKAGING
             await self._emit(job)
+            job.archive_path = build_archive(job.manga, job.chapter, temp_job, temp_job.parent)
+            job.archive_size_bytes = job.archive_path.stat().st_size
+            log.info("Chapter packaged id=%s images=%d archive_bytes=%d", job.job_id, job.image_count, job.archive_size_bytes)
             job.status = JobStatus.UPLOADING
             await self._emit(job)
-            job.upload_url = await self.storage.publish_directory(temp_job, f"Chapter_{job.chapter.number}")
-            job.archive_size_bytes = sum(path.stat().st_size for path in temp_job.iterdir() if path.is_file())
-            log.info("Chapter uploaded id=%s images=%d bytes=%d", job.job_id, job.image_count, job.archive_size_bytes)
+            job.upload_url = await self.storage.publish_file(job.archive_path, job.archive_path.name)
+            log.info("Chapter archive uploaded id=%s file=%s bytes=%d", job.job_id, job.archive_path.name, job.archive_size_bytes)
             job.status = JobStatus.COMPLETED
             job.finished_at = datetime.now(timezone.utc)
             log.info("Job completed id=%s chapter=%s", job.job_id, job.chapter.number)
