@@ -133,6 +133,9 @@ class RawkumaBot(commands.Bot):
         self.job_messages: dict[str, discord.Message] = {}
         self.job_channels: dict[str, discord.abc.Messageable] = {}
         self._command_cleanup_done = False
+        # CommandTree does not automatically use a Bot method named on_app_command_error.
+        # Bind the handler explicitly so signature/sync errors receive an English response.
+        self.tree.on_error = self.on_app_command_error
 
     def _configured_guild(self) -> discord.Object | None:
         if self.settings.discord_guild_id is None:
@@ -165,7 +168,8 @@ class RawkumaBot(commands.Bot):
             return
         configured_guild_id = self.settings.discord_guild_id
         log.info(
-            "Discord ready; enforcing one command scope guild_count=%d configured_guild_id=%s",
+            "Discord ready; enforcing one command scope bot_user_id=%s guild_count=%d configured_guild_id=%s",
+            self.user.id if self.user else "unknown",
             len(self.guilds),
             configured_guild_id,
         )
