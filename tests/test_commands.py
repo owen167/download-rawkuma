@@ -23,11 +23,12 @@ def test_all_user_visible_discord_sends_use_embeds():
         assert any(keyword.arg == "embed" for keyword in node.keywords), ast.unparse(node)
 
 
-def test_command_tree_contains_exactly_the_two_supported_commands(tmp_path):
+def test_command_tree_contains_exactly_the_three_supported_commands(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
     bot.tree.add_command(bot.download)
     bot.tree.add_command(bot.download_naver)
-    assert {command.name for command in bot.tree.get_commands()} == {"download", "download-naver"}
+    bot.tree.add_command(bot.download_kakao)
+    assert {command.name for command in bot.tree.get_commands()} == {"download", "download-naver", "download-kakao"}
 
 
 def test_guild_mode_registers_both_commands_in_one_scope_only(tmp_path):
@@ -45,7 +46,7 @@ def test_guild_mode_registers_both_commands_in_one_scope_only(tmp_path):
 
     guild = discord.Object(id=123456789)
     assert [command.name for command in bot.tree.get_commands()] == []
-    assert [command.name for command in bot.tree.get_commands(guild=guild)] == ["download", "download-naver"]
+    assert [command.name for command in bot.tree.get_commands(guild=guild)] == ["download", "download-naver", "download-kakao"]
     assert bot.tree.sync.await_count == 2
 
 
@@ -53,8 +54,10 @@ def test_download_callbacks_have_discord_signatures(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
     assert list(inspect.signature(bot.download.callback).parameters) == ["interaction", "url"]
     assert list(inspect.signature(bot.download_naver.callback).parameters) == ["interaction", "url"]
+    assert list(inspect.signature(bot.download_kakao.callback).parameters) == ["interaction", "url"]
     assert bot.download.binding is None
     assert bot.download_naver.binding is None
+    assert bot.download_kakao.binding is None
 
 
 def test_command_tree_has_direct_error_handler(tmp_path):

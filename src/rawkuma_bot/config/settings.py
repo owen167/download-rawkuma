@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     gofile_upload_timeout_seconds: float = Field(default=300.0, validation_alias="GOFILE_UPLOAD_TIMEOUT_SECONDS", gt=0)
     discord_max_file_mb: int = Field(default=25, validation_alias="DISCORD_MAX_FILE_MB", gt=0)
     user_agent: str = Field(default="RawkumaDiscordBot/1.0 (+https://rawkuma.net/)", validation_alias="USER_AGENT")
+    kakao_browser_timeout_seconds: float = Field(default=45.0, validation_alias="KAKAO_BROWSER_TIMEOUT_SECONDS", gt=0)
+    kakao_browser_executable: str = Field(default="", validation_alias="KAKAO_BROWSER_EXECUTABLE")
 
     def prepare_directories(self) -> None:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
