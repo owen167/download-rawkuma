@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +47,8 @@ class GoFileStorage:
             try:
                 form = aiohttp.FormData()
                 with path.open("rb") as file_handle:
-                    form.add_field("file", file_handle, filename=path.name, content_type="image/webp")
+                    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+                    form.add_field("file", file_handle, filename=path.name, content_type=content_type)
                     if folder_id:
                         form.add_field("folderId", folder_id)
                     headers = {"Authorization": f"Bearer {token}"} if token else {}
