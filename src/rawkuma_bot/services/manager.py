@@ -25,10 +25,13 @@ class DownloadManager:
         self.queue: asyncio.Queue[DownloadJob] = asyncio.Queue()
         self.jobs: dict[str, DownloadJob] = {}
         self.workers: list[asyncio.Task] = []
+        self._completion_events: dict[str, asyncio.Event] = {}
 
     async def start(self) -> None:
-        log.info("Starting download workers count=%d", self.settings.max_concurrent_downloads)
-        self.workers = [asyncio.create_task(self._worker(), name=f"rawkuma-worker-{i}") for i in range(self.settings.max_concurrent_downloads)]
+        # Chapter jobs are intentionally sequential: the next chapter starts only
+        # after the previous chapter has been uploaded and its completion Embed sent.
+        log.info("Starting download workers count=1 sequential_mode=true")
+        self.workers = [asyncio.create_task(self._worker(), name="rawkuma-worker-0")]
 
     async def stop(self) -> None:
         for worker in self.workers:
@@ -39,6 +42,7 @@ class DownloadManager:
     async def submit(self, user_id: int, guild_id: int, manga: MangaInfo, chapter: Chapter) -> DownloadJob:
         job = DownloadJob(user_id, guild_id, manga, chapter, uuid.uuid4().hex, manga.url)
         self.jobs[job.job_id] = job
+        self._completion_events[job.job_id] = asyncio.Event()
         await self.queue.put(job)
         log.info("Job queued id=%s user=%s chapter=%s queue_size=%d", job.job_id, user_id, chapter.number, self.queue.qsize())
         await self._emit(job)
@@ -51,6 +55,12 @@ class DownloadManager:
         job.status = JobStatus.CANCELLED
         log.info("Job cancelled id=%s", job_id)
         return True
+
+    async def wait_for_completion(self, job: DownloadJob) -> DownloadJob:
+        event = self._completion_events[job.job_id]
+        await event.wait()
+        self._completion_events.pop(job.job_id, None)
+        return job
 
     async def _emit(self, job: DownloadJob) -> None:
         if self.on_progress:
@@ -72,6 +82,9 @@ class DownloadManager:
                 log.exception("Job %s failed", job.job_id)
                 await self._emit(job)
             finally:
+                completion_event = self._completion_events.get(job.job_id)
+                if completion_event:
+                    completion_event.set()
                 self.queue.task_done()
 
     async def _run(self, job: DownloadJob) -> None:

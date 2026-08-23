@@ -263,11 +263,25 @@ class RawkumaBot(commands.Bot):
             await interaction.followup.send(embed=queued_embed, ephemeral=True)
         else:
             await interaction.response.send_message(embed=queued_embed, ephemeral=True)
-        for chapter in chapters:
+        for position, chapter in enumerate(chapters, start=1):
             job = await self.manager.submit(interaction.user.id, interaction.guild_id or 0, info, chapter)
             message = await interaction.followup.send(embed=job_embed(job), wait=True)
             self.job_messages[job.job_id] = message
             self.job_channels[job.job_id] = interaction.channel
+            log.info(
+                "Sequential chapter started position=%d total=%d chapter=%s",
+                position,
+                len(chapters),
+                chapter.number,
+            )
+            await self.manager.wait_for_completion(job)
+            log.info(
+                "Sequential chapter finished position=%d total=%d chapter=%s status=%s",
+                position,
+                len(chapters),
+                chapter.number,
+                job.status,
+            )
 
     async def handle_download(self, interaction: discord.Interaction, url: str) -> None:
         log.info("Download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
