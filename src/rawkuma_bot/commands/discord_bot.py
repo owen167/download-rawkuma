@@ -81,6 +81,19 @@ async def download_naver_command(interaction: discord.Interaction, url: str) -> 
     await handler(interaction, url)
 
 
+async def defer_if_needed(interaction: discord.Interaction, command_name: str) -> None:
+    if interaction.response.is_done():
+        log.debug("Interaction already acknowledged command=%s", command_name)
+        return
+    try:
+        await interaction.response.defer()
+    except discord.HTTPException as exc:
+        if getattr(exc, "code", None) == 40060:
+            log.warning("Interaction was acknowledged before defer command=%s; continuing with followup", command_name)
+            return
+        raise
+
+
 def status_embed(title: str, description: str, colour: discord.Colour) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, colour=colour)
     embed.set_footer(text=EMBED_FOOTER)
@@ -301,7 +314,13 @@ class RawkumaBot(commands.Bot):
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
                 await interaction.response.send_message(embed=embed, ephemeral=True)
-        except discord.HTTPException:
+        except discord.HTTPException as exc:
+            if getattr(exc, "code", None) == 40060:
+                try:
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                    return
+                except discord.HTTPException:
+                    pass
             log.exception("Could not send slash command error response")
 
     async def close(self) -> None:
@@ -388,7 +407,7 @@ class RawkumaBot(commands.Bot):
 
     async def handle_download(self, interaction: discord.Interaction, url: str) -> None:
         log.info("Rawkuma download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
-        await interaction.response.defer()
+        await defer_if_needed(interaction, "download")
         try:
             if not self.downloader.supports(url):
                 raise RawkumaError("Invalid Rawkuma URL")
@@ -419,7 +438,7 @@ class RawkumaBot(commands.Bot):
 
     async def handle_download_naver(self, interaction: discord.Interaction, url: str) -> None:
         log.info("Naver download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
-        await interaction.response.defer()
+        await defer_if_needed(interaction, "download-naver")
         try:
             if not self.naver_downloader.supports(url):
                 raise NaverError("Invalid Naver Webtoon URL")
@@ -454,7 +473,7 @@ class RawkumaBot(commands.Bot):
     async def handle_download_kakao(self, interaction: discord.Interaction, url: str) -> None:
         started = time.monotonic()
         log.info("Kakao download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
-        await interaction.response.defer()
+        await defer_if_needed(interaction, "download-kakao")
         log.info("Kakao interaction deferred elapsed=%.2fs", time.monotonic() - started)
         try:
             if not self.kakao_downloader.supports(url) or not self.kakao_downloader.is_manga_url(url):
@@ -487,7 +506,7 @@ class RawkumaBot(commands.Bot):
 
     async def handle_download_kakao_page(self, interaction: discord.Interaction, url: str) -> None:
         log.info("Kakao Page download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
-        await interaction.response.defer()
+        await defer_if_needed(interaction, "download-kakao-page")
         try:
             if not self.kakao_page_downloader.supports(url) or not self.kakao_page_downloader.is_manga_url(url):
                 raise KakaoPageError("Use a Kakao Page content URL")
