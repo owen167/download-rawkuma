@@ -1,0 +1,19 @@
+from rawkuma_bot.commands.discord_bot import ChapterBrowser, RawkumaBot
+from rawkuma_bot.config.settings import Settings
+from rawkuma_bot.downloaders.models import Chapter, MangaInfo
+
+
+def test_command_tree_contains_only_download(tmp_path):
+    bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
+    bot.tree.add_command(bot.download)
+    assert {command.name for command in bot.tree.get_commands()} == {"download"}
+
+
+def test_download_view_supports_twenty_chapter_selection(tmp_path):
+    bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
+    chapters = [Chapter(float(i), f"Chapter {i}", f"https://rawkuma.net/chapter-{i}") for i in range(1, 101)]
+    view = ChapterBrowser(bot, MangaInfo("Demo", "https://rawkuma.net/manga/demo"), chapters)
+    select = view.children[0]
+    assert view.page_count == 5
+    assert len(select.options) == 20
+    assert select.max_values == 20

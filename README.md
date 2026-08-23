@@ -1,0 +1,93 @@
+# Rawkuma Discord Bot
+
+بوت Discord متخصص في تنزيل فصول المانجا من `https://rawkuma.net/` فقط. يستقبل روابط الأعمال أو الفصول عبر Slash Commands، يعرض معلومات العمل وقائمة الفصول، ويضع عمليات التنزيل في Queue مع تحديث تقدّم داخل Embed واحد.
+
+> لا يتجاوز المشروع DRM أو CAPTCHA أو Paywall أو أي حماية وصول. استخدمه فقط مع المحتوى الذي يسمح لك المصدر وحقوقه بتنزيله.
+
+## أمر Discord الوحيد
+
+يحتوي البوت على **أمر واحد فقط**:
+
+```text
+/download url:<URL>
+```
+
+يقبل الأمر رابط عمل Rawkuma أو رابط فصل مباشر. عند استخدام رابط العمل، يجلب البوت المعلومات والغلاف وعدد الفصول، ثم يعرض Embed وقائمة Select Menu متعددة الاختيار. كل صفحة تعرض 20 فصلًا، وتظهر زرا **فصول أحدث** و**فصول أقدم** عند الحاجة. يمكن اختيار فصل واحد أو حتى 20 فصلًا من الصفحة نفسها، ثم يضيفها البوت إلى Queue وينزلها بالتوازي المحدود.
+
+بعد اختيار الفصول، ينشئ البوت Job مستقلة لكل فصل ويحدّث Embed التقدم بدل إرسال رسالة لكل صورة. لا توجد أوامر `/chapters` أو `/chapter` أو `/range` أو `/queue` أو `/cancel` أو أوامر Admin في هذا الإصدار.
+
+## ما تم استخراجه من المصدر
+
+تمت مراجعة مستودع `elboletaire/manga-downloader` عند الإصدار `v1.7.0`. Rawkuma في المصدر الأصلي يمر عبر `grabber/plainhtml.go` باستخدام المحددات `h1[itemprop="name"]` و`#chapter-list [data-chapter-number]` و`[data-image-data] img`. كما تم الحفاظ مفهوميًا على إعادة المحاولة، التنزيل المتوازي المحدود، وعمليات الترتيب حسب رقم الصفحة من `downloader/fetch.go`. لم يتم نسخ تطبيق CLI متعدد المواقع أو الأوامر غير المتعلقة بـ Rawkuma.
+
+## البنية
+
+```text
+.
+├── main.py
+├── requirements.txt
+├── src/rawkuma_bot/
+│   ├── commands/discord_bot.py
+│   ├── config/settings.py
+│   ├── database/schema.py
+│   ├── downloaders/models.py
+│   ├── downloaders/rawkuma/downloader.py
+│   ├── services/archive.py
+│   ├── services/manager.py
+│   └── storage/base.py
+├── tests/
+├── data/
+├── temp/
+├── downloads/
+├── THIRD_PARTY_AGPL-3.0.txt
+└── THIRD_PARTY_NOTICES.md
+```
+
+## التثبيت والتشغيل
+
+يتطلب Python 3.11 أو أحدث. أنشئ بيئة افتراضية وثبّت المتطلبات:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python main.py
+```
+
+ضع `DISCORD_TOKEN` في `.env` فقط. يفضل وضع `DISCORD_GUILD_ID` أثناء الاختبار حتى يظهر الأمر بسرعة داخل سيرفر واحد. لا ترفع `.env` أو Cookies أو أي Credentials إلى Git.
+
+## Logging
+
+يكتب البوت سجلًا مستمرًا في `logs/rawkuma-bot.log`، وسجلًا منفصلًا للأخطاء في `logs/errors.log`. الملفات تستخدم تدويرًا تلقائيًا بحد أقصى 5 MB لكل ملف مع الاحتفاظ بخمس نسخ احتياطية. يسجل البوت بدء التشغيل، جاهزية قاعدة البيانات، اتصال Discord، مراحل كل Job، أخطاء الشبكة والتنزيل، وأخطاء Discord. يوجد مرشح Redaction يخفي القيم التي تشبه Tokens أو Cookies أو مفاتيح API. عند حدوث مشكلة، أرسل محتوى `logs/errors.log` أو آخر أسطر من `logs/rawkuma-bot.log` بعد حذف أي بيانات سرية.
+
+## التخزين والتنظيف
+
+ينشئ كل Job مجلدًا مستقلًا تحت `temp/job_<id>/chapter_<number>/`. تُنزّل الصور مباشرة إلى الملفات بدل تجميعها كلها في الذاكرة، وتُحافظ على امتداد الصورة الأصلي عندما يكون معروفًا. بعد إنشاء ZIP يُرسل إلى Discord إذا كان ضمن `DISCORD_MAX_FILE_MB`، ثم يُحذف الأرشيف ومجلد الصور في مسار النجاح والفشل. توجد واجهة `StorageAdapter` لإضافة S3 أو Google Drive أو Cloudflare R2 لاحقًا.
+
+## الإعدادات
+
+| المتغير | الافتراضي | الوظيفة |
+|---|---:|---|
+| `DISCORD_TOKEN` | مطلوب | توكن البوت |
+| `DISCORD_GUILD_ID` | فارغ | مزامنة أوامر أسرع داخل Guild |
+| `MAX_CONCURRENT_DOWNLOADS` | `2` | عدد Jobs النشطة |
+| `MAX_CONCURRENT_PAGES` | `6` | عدد صور الفصل المتزامنة |
+| `MAX_CHAPTERS_PER_JOB` | `20` | الحد الأقصى للفصول المختارة من القائمة |
+| `RETRY_ATTEMPTS` | `3` | محاولات الصور الفاشلة |
+| `DISCORD_MAX_FILE_MB` | `25` | حد إرسال الأرشيف مباشرة إلى Discord |
+| `DATABASE_URL` | SQLite | مكان قاعدة البيانات |
+| `LOG_DIR` | `./logs` | مجلد ملفات اللوج |
+
+## الترخيص
+
+هذا المشروع يعيد تنفيذ حدود Rawkuma المطلوبة اعتمادًا على دراسة سلوك مشروع AGPL-3.0. توجد نسخة الترخيص الكاملة وإشعار المصدر في `THIRD_PARTY_AGPL-3.0.txt` و`THIRD_PARTY_NOTICES.md`. راجع الالتزامات القانونية قبل نشر نسخة معدلة كخدمة شبكة.
+
+## الاختبارات
+
+```bash
+pytest -q
+python3 -m compileall -q main.py src
+```
+
+الاختبارات تستخدم HTML محليًا وMocks ولا تعتمد على تحميل محتوى حي. اختبر التنزيل الحقيقي فقط على محتوى لديك حق استخدامه.
