@@ -20,6 +20,7 @@ from .errors import (
     InvalidRawkumaURL,
     MangaNotFound,
     NetworkError,
+    RawkumaError,
     SourceUnavailable,
 )
 
