@@ -71,5 +71,6 @@ def test_archive_preserves_nested_layout(tmp_path: Path) -> None:
     (image_dir / "002.webp").write_bytes(b"two")
     archive = build_archive(MangaInfo("Demo Manga", "https://rawkuma.net/manga/demo/"), Chapter("10.354", "Chapter 10.354", "https://rawkuma.net/manga/demo/chapter-10.354"), image_dir, tmp_path / "out")
     import zipfile
+    assert archive.name == "Chapter_10.354.zip"
     with zipfile.ZipFile(archive) as bundle:
         assert bundle.namelist() == ["Demo Manga/Chapter_10.354/001.webp", "Demo Manga/Chapter_10.354/002.webp"]

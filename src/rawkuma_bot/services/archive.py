@@ -19,7 +19,7 @@ def build_archive(manga: MangaInfo, chapter: Chapter, images_dir: Path, output_d
     manga_name = safe_name(manga.title)
     chapter_number = safe_name(chapter.number, fallback="unknown")
     chapter_name = f"Chapter_{chapter_number}"
-    archive = output_dir / f"{manga_name}_Chapter_{chapter_number}.zip"
+    archive = output_dir / f"{chapter_name}.zip"
     staging = output_dir / f".staging_{manga_name}_{chapter_number}"
     shutil.rmtree(staging, ignore_errors=True)
     nested = staging / manga_name / chapter_name
