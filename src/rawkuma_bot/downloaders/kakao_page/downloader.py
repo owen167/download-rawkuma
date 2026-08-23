@@ -14,6 +14,7 @@ import aiohttp
 
 from rawkuma_bot.config.settings import Settings
 from rawkuma_bot.downloaders.models import Chapter, MangaInfo, Progress
+from rawkuma_bot.services.naver_image_merge import merge_images_with_mapping
 from .errors import (
     ChapterNotFound,
     ContentNotFound,
@@ -245,16 +246,18 @@ class KakaoPageDownloader:
         return Chapter(number=self._chapter_number(title, product_id), title=title, url=url)
 
     @staticmethod
-    def _paragraph_html(node: dict[str, Any], image_names: dict[str, str]) -> str:
+    def _paragraph_html(node: dict[str, Any], image_names: dict[str, str | list[str]]) -> str:
         kind = str(node.get("type") or "").upper()
         text = html.escape(str(node.get("text") or ""))
         image = node.get("image")
         if isinstance(image, dict) and image.get("imageSrcKey"):
             key = str(image["imageSrcKey"])
-            name = image_names.get(key)
-            if name:
+            names = image_names.get(key)
+            if names:
+                if isinstance(names, str):
+                    names = [names]
                 alt = html.escape(str((node.get("attributes") or {}).get("alt") or ""))
-                return f'<p><img src="images/{name}" alt="{alt}"></p>'
+                return "".join(f'<p><img src="images/{name}" alt="{alt}"></p>' for name in names)
         children = node.get("childParagraphList")
         inner = "".join(KakaoPageDownloader._paragraph_html(child, image_names) for child in children or [] if isinstance(child, dict))
         if inner:
@@ -333,27 +336,21 @@ class KakaoPageDownloader:
             raise ContentNotFound("Kakao Page chapter content was not available")
         image_refs: list[dict[str, str]] = []
         seen: set[str] = set()
-        fragments: list[str] = []
+        has_content = False
         for document in content_docs:
             info = document.get("contentInfo") if isinstance(document, dict) else None
             if not isinstance(info, dict):
                 continue
-            for node in info.get("paragraphList") or []:
-                if not isinstance(node, dict):
-                    continue
-                self._collect_images(node, image_refs, seen)
-        if not fragments and not image_refs:
-            raise ContentNotFound("Kakao Page chapter contained no readable content")
-        image_names = {ref["key"]: f"{index:03d}{self._extension(ref['filename'])}" for index, ref in enumerate(image_refs, 1)}
-        fragments = []
-        for document in content_docs:
-            info = document.get("contentInfo") if isinstance(document, dict) else None
-            for node in (info or {}).get("paragraphList") or []:
+            paragraphs = info.get("paragraphList") or []
+            has_content = has_content or bool(paragraphs)
+            for node in paragraphs:
                 if isinstance(node, dict):
-                    fragments.append(self._paragraph_html(node, image_names))
+                    self._collect_images(node, image_refs, seen)
+        if not has_content and not image_refs:
+            raise ContentNotFound("Kakao Page chapter contained no readable content")
         destination.mkdir(parents=True, exist_ok=True)
-        images_dir = destination / "images"
-        images_dir.mkdir(parents=True, exist_ok=True)
+        source_dir = destination / ".source"
+        source_dir.mkdir(parents=True, exist_ok=True)
         progress.total = len(image_refs) + 1
         progress.current = 0
         progress.bytes_downloaded = 0
@@ -364,7 +361,7 @@ class KakaoPageDownloader:
 
         async def fetch_one(index: int, ref: dict[str, str]) -> None:
             async with semaphore:
-                target = images_dir / image_names[ref["key"]]
+                target = source_dir / f"{index + 1:03d}{self._extension(ref['filename'])}"
                 await self._download_asset(self._asset_url(root, ref["key"], ref["filename"]), target, chapter.url)
                 downloaded[index] = target
                 progress.current += 1
@@ -375,6 +372,31 @@ class KakaoPageDownloader:
 
         try:
             await asyncio.gather(*(fetch_one(index, ref) for index, ref in enumerate(image_refs)))
+            source_paths = [path for path in downloaded if path is not None]
+            merged_dir = destination / ".merged"
+            merged_paths, _source_mapping = merge_images_with_mapping(source_paths, merged_dir)
+            final_paths: list[Path] = []
+            merged_to_final: dict[Path, Path] = {}
+            images_dir = destination / "images"
+            images_dir.mkdir(parents=True, exist_ok=True)
+            for index, path in enumerate(merged_paths, 1):
+                target = images_dir / f"{index:03d}{path.suffix.lower()}"
+                path.replace(target)
+                merged_to_final[path] = target
+                final_paths.append(target)
+            for path in source_paths:
+                path.unlink(missing_ok=True)
+            shutil.rmtree(source_dir, ignore_errors=True)
+            shutil.rmtree(merged_dir, ignore_errors=True)
+            image_names: dict[str, list[str]] = {}
+            for index, ref in enumerate(image_refs):
+                image_names[ref["key"]] = [merged_to_final[path].name for path in _source_mapping.get(index, []) if path in merged_to_final]
+            fragments: list[str] = []
+            for document in content_docs:
+                info = document.get("contentInfo") if isinstance(document, dict) else None
+                for node in (info or {}).get("paragraphList") or []:
+                    if isinstance(node, dict):
+                        fragments.append(self._paragraph_html(node, image_names))
             chapter_title = html.escape(str(item.get("title") or chapter.title))
             document = "<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><title>" + chapter_title + "</title><style>body{max-width:900px;margin:2rem auto;padding:0 1rem;line-height:1.8;font-family:system-ui,sans-serif}img{max-width:100%;height:auto;display:block;margin:1rem auto}</style></head><body><h1>" + chapter_title + "</h1>" + "".join(fragments) + "</body></html>"
             html_path = destination / "chapter.html"
@@ -384,7 +406,7 @@ class KakaoPageDownloader:
             progress.update_speed()
             if on_progress:
                 await on_progress()
-            return [html_path, *(path for path in downloaded if path is not None)]
+            return [html_path, *final_paths]
         except Exception:
             shutil.rmtree(destination, ignore_errors=True)
             raise
