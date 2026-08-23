@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 PAGE_SIZE = 20
+EMBED_FOOTER = "Made with ❤️ by OWEN"
 
 
 def info_embed(info: MangaInfo, chapters: list[Chapter]) -> discord.Embed:
@@ -36,7 +37,7 @@ def info_embed(info: MangaInfo, chapters: list[Chapter]) -> discord.Embed:
     embed.add_field(name="📌 Status", value=info.status or "Unknown", inline=True)
     if info.description:
         embed.description = info.description[:1000]
-    embed.set_footer(text="Select up to 20 chapters from the menu to start downloading")
+    embed.set_footer(text=EMBED_FOOTER)
     return embed
 
 
@@ -69,7 +70,7 @@ async def download_naver_command(interaction: discord.Interaction, url: str) -> 
 
 def status_embed(title: str, description: str, colour: discord.Colour) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, colour=colour)
-    embed.set_footer(text="Manga Download Bot")
+    embed.set_footer(text=EMBED_FOOTER)
     return embed
 
 
@@ -97,6 +98,7 @@ def job_embed(job: DownloadJob) -> discord.Embed:
     embed.add_field(name="Status", value=job.status.value, inline=True)
     if job.error:
         embed.add_field(name="Error", value=job.error, inline=False)
+    embed.set_footer(text=EMBED_FOOTER)
     return embed
 
 
@@ -111,7 +113,7 @@ def chapter_ready_embed(job: DownloadJob) -> discord.Embed:
     embed.add_field(name="🖼️ Images", value=str(job.image_count), inline=True)
     embed.add_field(name="📦 Size", value=f"{size_mb:.2f} MB", inline=True)
     embed.add_field(name="🔗 Download Link", value=f"[Open on GoFile]({job.upload_url})", inline=False)
-    embed.set_footer(text="Manga Download Bot")
+    embed.set_footer(text=EMBED_FOOTER)
     return embed
 
 

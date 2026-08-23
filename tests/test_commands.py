@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock
 
 import discord
 
-from rawkuma_bot.commands.discord_bot import ChapterBrowser, RawkumaBot, info_embed
+from rawkuma_bot.commands.discord_bot import EMBED_FOOTER, ChapterBrowser, RawkumaBot, chapter_ready_embed, info_embed, job_embed, status_embed
 from rawkuma_bot.config.settings import Settings
-from rawkuma_bot.downloaders.models import Chapter, MangaInfo
+from rawkuma_bot.downloaders.models import Chapter, DownloadJob, MangaInfo
 
 
 def test_all_user_visible_discord_sends_use_embeds():
@@ -63,6 +63,17 @@ def test_download_callbacks_have_discord_signatures(tmp_path):
 def test_command_tree_has_direct_error_handler(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
     assert bot.tree.on_error.__self__ is bot
+
+
+def test_all_embed_builders_use_owen_fingerprint(tmp_path):
+    info = MangaInfo("Demo", "https://example.com/demo")
+    chapter = Chapter("1", "Chapter 1", "https://example.com/chapter-1")
+    job = DownloadJob(1, 1, info, chapter, "job", chapter.url)
+    job.upload_url = "https://gofile.io/d/demo"
+    job.archive_size_bytes = 1024
+    embeds = [info_embed(info, [chapter]), status_embed("Status", "Working", discord.Colour.blue()), job_embed(job), chapter_ready_embed(job)]
+    for embed in embeds:
+        assert embed.footer.text == EMBED_FOOTER
 
 
 def test_naver_info_embed_uses_full_cover_image(tmp_path):

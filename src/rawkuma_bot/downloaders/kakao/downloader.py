@@ -16,6 +16,7 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright, Time
 
 from rawkuma_bot.config.settings import Settings
 from rawkuma_bot.downloaders.models import Chapter, ImageRef, MangaInfo, Progress
+from rawkuma_bot.services.naver_image_merge import merge_naver_images
 from rawkuma_bot.downloaders.kakao.errors import (
     ChapterNotFound,
     DownloadFailed,
@@ -344,4 +345,15 @@ class KakaoDownloader:
                 progress.update_speed()
                 if on_progress:
                     await on_progress()
-            return paths
+
+            merged_dir = destination / ".merged"
+            merged_paths = merge_naver_images(paths, merged_dir)
+            for path in paths:
+                path.unlink(missing_ok=True)
+            ordered_paths: list[Path] = []
+            for index, path in enumerate(merged_paths, 1):
+                target = destination / f"{index:03d}{path.suffix.lower()}"
+                path.replace(target)
+                ordered_paths.append(target)
+            shutil.rmtree(merged_dir, ignore_errors=True)
+            return ordered_paths
