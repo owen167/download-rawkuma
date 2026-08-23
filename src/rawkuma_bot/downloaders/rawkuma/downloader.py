@@ -76,16 +76,13 @@ class RawkumaDownloader:
         return " ".join((text or "").split()).strip()
 
     @staticmethod
-    def _chapter_number(text: str, url: str = "") -> float | None:
+    def _chapter_number(text: str, url: str = "") -> str | None:
         match = CHAPTER_NUMBER_RE.search(text)
         if not match:
             match = URL_CHAPTER_RE.search(url)
         if not match:
             return None
-        try:
-            return float(match.group(1))
-        except ValueError:
-            return None
+        return match.group(1)
 
     @staticmethod
     def _absolute(base: str, value: str | None) -> str:
@@ -103,8 +100,39 @@ class RawkumaDownloader:
             title = self._clean((soup.title.get_text(" ", strip=True) if soup.title else ""))
         if not title:
             raise MangaNotFound("Manga Not Found")
-        cover_node = soup.select_one("meta[property='og:image']") or soup.select_one("img")
-        cover = cover_node.get("content") if cover_node and cover_node.name == "meta" else cover_node.get("src") if cover_node else None
+        def image_value(node) -> str | None:
+            if node is None:
+                return None
+            if node.name == "meta":
+                return node.get("content")
+            for attribute in ("src", "data-src", "data-lazy-src", "data-original"):
+                value = node.get(attribute)
+                if value and not value.startswith("data:image"):
+                    return value
+            return None
+
+        def is_brand_asset(value: str | None) -> bool:
+            lowered = (value or "").lower()
+            return any(marker in lowered for marker in ("rawkuma-logo", "/logo", "upvote", "funny", "surprised", "angry", "sad"))
+
+        cover = image_value(soup.select_one("meta[property='og:image']"))
+        if is_brand_asset(cover):
+            cover = None
+        if not cover:
+            image_candidates = soup.select("img.wp-post-image, img[itemprop='image'], img[alt]")
+            for candidate in image_candidates:
+                value = image_value(candidate)
+                alt = self._clean(candidate.get("alt"))
+                classes = set(candidate.get("class", []))
+                if value and not is_brand_asset(value) and ("wp-post-image" in classes or alt.lower() == title.lower()):
+                    cover = value
+                    break
+        if not cover:
+            for candidate in soup.select("img"):
+                value = image_value(candidate)
+                if value and not is_brand_asset(value):
+                    cover = value
+                    break
         status_node = soup.select_one('[itemprop="status"]') or soup.select_one(".post-content_item .summary-content")
         description_node = soup.select_one('[itemprop="description"]') or soup.select_one(".summary_content")
         return MangaInfo(
@@ -138,20 +166,20 @@ class RawkumaDownloader:
             if key in seen:
                 continue
             seen.add(key)
-            chapters.append(Chapter(number=number, title=text or f"Chapter {number:g}", url=chapter_url))
-        chapters.sort(key=lambda chapter: chapter.number, reverse=True)
+            chapters.append(Chapter(number=number, title=f"Chapter {number}", url=chapter_url))
+        chapters.sort(key=lambda chapter: chapter.sort_key, reverse=True)
         if not chapters:
             raise ChapterNotFound("Chapter Not Found")
         return chapters
 
-    async def get_chapter(self, url: str, number: float | None = None) -> Chapter:
+    async def get_chapter(self, url: str, number: str | None = None) -> Chapter:
         if not self.supports(url):
             raise InvalidRawkumaURL("Invalid Rawkuma URL")
         if number is None:
             number = self._chapter_number(url, url)
         if number is None:
             raise ChapterNotFound("Chapter Not Found")
-        return Chapter(number=number, title=f"Chapter {number:g}", url=url)
+        return Chapter(number=number, title=f"Chapter {number}", url=url)
 
     @staticmethod
     def _extract_image_urls(raw_html: str, soup: BeautifulSoup, page_url: str) -> list[str]:

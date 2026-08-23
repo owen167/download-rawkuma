@@ -8,7 +8,8 @@ from rawkuma_bot.services.archive import build_archive
 
 SERIES_HTML = """
 <h1 itemprop="name">Demo Manga</h1>
-<meta property="og:image" content="/cover.webp">
+<img class="custom-logo" src="https://rawkuma.net/wp-content/uploads/2025/09/Rawkuma-Logo.png" alt="Rawkuma">
+<img class="wp-post-image" src="/cover.webp" alt="Demo Manga">
 <div id="chapter-list">
  <div data-chapter-number="2"><span>Chapter 2</span><a href="/manga/demo/chapter-2">read</a></div>
  <div data-chapter-number="1.5"><span>Chapter 1.5</span><a href="/manga/demo/chapter-1.5">read</a></div>
@@ -43,7 +44,8 @@ async def test_extracts_title_chapters_and_images(tmp_path: Path) -> None:
     info = await downloader.get_manga_info("https://rawkuma.net/manga/demo/")
     chapters = await downloader.get_chapters(info.url)
     assert info.title == "Demo Manga"
-    assert [chapter.number for chapter in chapters] == [2.0, 1.5]
+    assert info.cover_url == "https://rawkuma.net/cover.webp"
+    assert [chapter.number for chapter in chapters] == ["2", "1.5"]
     downloader._get_text = fake_chapter
     images = await downloader.get_images(chapters[0])
     assert [image.url for image in images] == ["https://cdn.example/002.webp", "https://cdn.example/001.webp"]
@@ -55,7 +57,7 @@ def test_archive_preserves_nested_layout(tmp_path: Path) -> None:
     image_dir.mkdir()
     (image_dir / "001.webp").write_bytes(b"one")
     (image_dir / "002.webp").write_bytes(b"two")
-    archive = build_archive(MangaInfo("Demo Manga", "https://rawkuma.net/manga/demo/"), Chapter(2, "Chapter 2", "https://rawkuma.net/manga/demo/chapter-2"), image_dir, tmp_path / "out")
+    archive = build_archive(MangaInfo("Demo Manga", "https://rawkuma.net/manga/demo/"), Chapter("10.354", "Chapter 10.354", "https://rawkuma.net/manga/demo/chapter-10.354"), image_dir, tmp_path / "out")
     import zipfile
     with zipfile.ZipFile(archive) as bundle:
-        assert bundle.namelist() == ["Demo Manga/Chapter_002/001.webp", "Demo Manga/Chapter_002/002.webp"]
+        assert bundle.namelist() == ["Demo Manga/Chapter_10.354/001.webp", "Demo Manga/Chapter_10.354/002.webp"]

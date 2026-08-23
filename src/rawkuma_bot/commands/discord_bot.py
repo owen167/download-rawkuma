@@ -59,7 +59,7 @@ def job_embed(job: DownloadJob) -> discord.Embed:
         title, colour = "📥 Downloading Chapter", discord.Colour.blurple()
     embed = discord.Embed(title=title, colour=colour)
     embed.add_field(name="📚 Manga", value=job.manga.title, inline=True)
-    embed.add_field(name="📖 Chapter", value=f"{job.chapter.number:g}", inline=True)
+    embed.add_field(name="📖 Chapter", value=job.chapter.number, inline=True)
     embed.add_field(name="🖼️ Images", value=f"{progress.current} / {progress.total or '?'}", inline=True)
     embed.add_field(name="📊 Progress", value=f"{bar} {progress.percent:.0f}%", inline=False)
     embed.add_field(name="⏱️ Time", value=f"{progress.elapsed_seconds:.0f}s", inline=True)
@@ -74,7 +74,7 @@ class ChapterSelect(discord.ui.Select):
     def __init__(self, browser: "ChapterBrowser") -> None:
         self.browser = browser
         options = [
-            discord.SelectOption(label=f"Chapter {chapter.number:g}"[:100], description=chapter.title[:100], value=str(index), emoji="📖")
+            discord.SelectOption(label=f"Chapter {chapter.number}"[:100], description=chapter.title[:100], value=str(index), emoji="📖")
             for index, chapter in enumerate(browser.page_chapters)
         ]
         super().__init__(
@@ -113,7 +113,7 @@ class ChapterBrowser(discord.ui.View):
     def __init__(self, bot: "RawkumaBot", info: MangaInfo, chapters: list[Chapter]) -> None:
         super().__init__(timeout=900)
         self.bot, self.info = bot, info
-        self.chapters = sorted(chapters, key=lambda chapter: chapter.number, reverse=True)
+        self.chapters = sorted(chapters, key=lambda chapter: chapter.sort_key, reverse=True)
         self.page = 0
         self.rebuild()
 

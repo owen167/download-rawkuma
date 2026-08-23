@@ -17,9 +17,10 @@ def safe_name(value: str, fallback: str = "untitled") -> str:
 def build_archive(manga: MangaInfo, chapter: Chapter, images_dir: Path, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     manga_name = safe_name(manga.title)
-    chapter_name = f"Chapter_{chapter.number:03g}"
-    archive = output_dir / f"{manga_name}_Chapter_{chapter.number:03g}.zip"
-    staging = output_dir / f".staging_{manga_name}_{chapter.number:g}"
+    chapter_number = safe_name(chapter.number, fallback="unknown")
+    chapter_name = f"Chapter_{chapter_number}"
+    archive = output_dir / f"{manga_name}_Chapter_{chapter_number}.zip"
+    staging = output_dir / f".staging_{manga_name}_{chapter_number}"
     shutil.rmtree(staging, ignore_errors=True)
     nested = staging / manga_name / chapter_name
     nested.mkdir(parents=True, exist_ok=True)

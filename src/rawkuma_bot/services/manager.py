@@ -81,7 +81,7 @@ class DownloadManager:
         job.started_at = datetime.now(timezone.utc)
         log.info("Job started id=%s chapter=%s", job.job_id, job.chapter.number)
         await self._emit(job)
-        temp_job = self.settings.temp_dir / f"job_{job.job_id}" / f"chapter_{job.chapter.number:g}"
+        temp_job = self.settings.temp_dir / f"job_{job.job_id}" / f"chapter_{job.chapter.number}"
         try:
             files = await self.downloader.download_chapter(job.chapter, temp_job, job.progress)
             job.image_count = len(files)

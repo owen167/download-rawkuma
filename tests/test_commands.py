@@ -61,7 +61,7 @@ def test_command_tree_has_direct_error_handler(tmp_path):
 
 def test_download_view_supports_twenty_chapter_selection(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
-    chapters = [Chapter(float(i), f"Chapter {i}", f"https://rawkuma.net/chapter-{i}") for i in range(1, 101)]
+    chapters = [Chapter(str(i), f"Chapter {i}", f"https://rawkuma.net/chapter-{i}") for i in range(1, 101)]
     view = ChapterBrowser(bot, MangaInfo("Demo", "https://rawkuma.net/manga/demo"), chapters)
     select = view.children[0]
     assert view.page_count == 5

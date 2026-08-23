@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
@@ -20,9 +21,17 @@ class JobStatus(StrEnum):
 
 @dataclass(slots=True, frozen=True)
 class Chapter:
-    number: float
+    # Keep the exact chapter label from Rawkuma, including decimals such as 10.354.
+    number: str
     title: str
     url: str
+
+    @property
+    def sort_key(self) -> Decimal:
+        try:
+            return Decimal(self.number)
+        except (InvalidOperation, ValueError):
+            return Decimal("-Infinity")
 
 
 @dataclass(slots=True, frozen=True)
