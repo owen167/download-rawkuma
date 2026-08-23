@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import discord
 
-from rawkuma_bot.commands.discord_bot import ChapterBrowser, RawkumaBot
+from rawkuma_bot.commands.discord_bot import ChapterBrowser, RawkumaBot, info_embed
 from rawkuma_bot.config.settings import Settings
 from rawkuma_bot.downloaders.models import Chapter, MangaInfo
 
@@ -60,6 +60,13 @@ def test_download_callbacks_have_discord_signatures(tmp_path):
 def test_command_tree_has_direct_error_handler(tmp_path):
     bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
     assert bot.tree.on_error.__self__ is bot
+
+
+def test_naver_info_embed_uses_full_cover_image(tmp_path):
+    info = MangaInfo("Naver Demo", "https://comic.naver.com/webtoon/list?titleId=807777", source="Naver", cover_url="https://image.naver.com/cover.jpg")
+    embed = info_embed(info, [])
+    assert embed.image.url == "https://image.naver.com/cover.jpg"
+    assert not embed.thumbnail.url
 
 
 def test_download_view_supports_twenty_chapter_selection(tmp_path):

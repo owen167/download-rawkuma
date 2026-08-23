@@ -2,3 +2,4 @@ discord.py>=2.4,<3
 aiohttp>=3.9,<4
 beautifulsoup4>=4.12,<5
 pydantic-settings>=2.5,<3
+Pillow>=10.0,<13

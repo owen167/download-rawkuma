@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shutil
 from pathlib import Path
 from typing import Awaitable, Callable
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse, urlunparse
@@ -12,6 +13,7 @@ from bs4 import BeautifulSoup
 
 from rawkuma_bot.config.settings import Settings
 from rawkuma_bot.downloaders.models import Chapter, ImageRef, MangaInfo, Progress
+from rawkuma_bot.services.naver_image_merge import merge_naver_images
 from .errors import (
     ChapterNotFound,
     DownloadFailed,
@@ -280,9 +282,21 @@ class NaverDownloader:
 
         try:
             await asyncio.gather(*(download_one(index, image) for index, image in enumerate(images)))
+            source_paths = [path for path in downloaded if path is not None]
+            merged_dir = destination / ".merged"
+            merged_paths = merge_naver_images(source_paths, merged_dir)
+            for path in source_paths:
+                path.unlink(missing_ok=True)
+            renamed_paths: list[Path] = []
+            for index, path in enumerate(merged_paths, 1):
+                target = destination / f"{index:03d}{path.suffix.lower()}"
+                path.replace(target)
+                renamed_paths.append(target)
+            shutil.rmtree(merged_dir, ignore_errors=True)
+            return renamed_paths
         except Exception:
             for path in downloaded:
                 if path:
                     path.unlink(missing_ok=True)
+            shutil.rmtree(destination / ".merged", ignore_errors=True)
             raise
-        return [path for path in downloaded if path is not None]
