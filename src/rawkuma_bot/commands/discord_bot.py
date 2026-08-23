@@ -132,27 +132,52 @@ class RawkumaBot(commands.Bot):
         self.manager = DownloadManager(settings, self.downloader, self.on_progress)
         self.job_messages: dict[str, discord.Message] = {}
         self.job_channels: dict[str, discord.abc.Messageable] = {}
-        self._guild_cleanup_done = False
+        self._command_cleanup_done = False
+
+    def _configured_guild(self) -> discord.Object | None:
+        if self.settings.discord_guild_id is None:
+            return None
+        return discord.Object(id=self.settings.discord_guild_id)
 
     async def setup_hook(self) -> None:
-        log.info("Discord setup started; clearing old global commands")
         await self.manager.start()
+        configured_guild = self._configured_guild()
+        if configured_guild is None:
+            # Global-only mode: clear any stale global commands, then register one command globally.
+            log.info("Discord setup started; using global command scope only")
+            self.tree.clear_commands(guild=None)
+            self.tree.add_command(self.download)
+            await self.tree.sync()
+            log.info("Global command sync completed; registered commands=download")
+            return
+
+        # Guild-only mode: clear global commands first so Discord cannot show a duplicate.
+        log.info("Discord setup started; using guild-only command scope guild_id=%s", configured_guild.id)
         self.tree.clear_commands(guild=None)
-        self.tree.add_command(self.download)
         await self.tree.sync()
-        log.info("Global command sync completed; registered commands=download")
+        self.tree.clear_commands(guild=configured_guild)
+        self.tree.add_command(self.download, guild=configured_guild)
+        await self.tree.sync(guild=configured_guild)
+        log.info("Guild command sync completed guild_id=%s registered=download", configured_guild.id)
 
     async def on_ready(self) -> None:
-        if self._guild_cleanup_done:
+        if self._command_cleanup_done:
             return
-        log.info("Discord ready; clearing old guild commands guild_count=%d", len(self.guilds))
+        configured_guild_id = self.settings.discord_guild_id
+        log.info(
+            "Discord ready; enforcing one command scope guild_count=%d configured_guild_id=%s",
+            len(self.guilds),
+            configured_guild_id,
+        )
         for guild in self.guilds:
             guild_object = discord.Object(id=guild.id)
             self.tree.clear_commands(guild=guild_object)
-            self.tree.copy_global_to(guild=guild_object)
+            if configured_guild_id is not None and guild.id == configured_guild_id:
+                self.tree.add_command(self.download, guild=guild_object)
             await self.tree.sync(guild=guild_object)
-            log.info("Guild command sync completed guild_id=%s registered=download", guild.id)
-        self._guild_cleanup_done = True
+            registered = "download" if configured_guild_id is not None and guild.id == configured_guild_id else "none"
+            log.info("Guild command sync completed guild_id=%s registered=%s", guild.id, registered)
+        self._command_cleanup_done = True
 
     async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
         log.error("Slash command failed name=%s", getattr(interaction.command, "qualified_name", "unknown"), exc_info=(type(error), error, error.__traceback__))
