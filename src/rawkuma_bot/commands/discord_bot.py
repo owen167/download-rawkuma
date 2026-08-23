@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING
 
 import discord
@@ -431,13 +433,18 @@ class RawkumaBot(commands.Bot):
 
 
     async def handle_download_kakao(self, interaction: discord.Interaction, url: str) -> None:
+        started = time.monotonic()
         log.info("Kakao download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
         await interaction.response.defer()
+        log.info("Kakao interaction deferred elapsed=%.2fs", time.monotonic() - started)
         try:
             if not self.kakao_downloader.supports(url) or not self.kakao_downloader.is_manga_url(url):
                 raise KakaoError("Use a Kakao Webtoon content URL")
-            info = await self.kakao_downloader.get_manga_info(url)
-            chapters = await self.kakao_downloader.get_chapters(url)
+            info, chapters = await asyncio.gather(
+                self.kakao_downloader.get_manga_info(url),
+                self.kakao_downloader.get_chapters(url),
+            )
+            log.info("Kakao metadata and chapters ready title=%s count=%d elapsed=%.2fs", info.title, len(chapters), time.monotonic() - started)
             await interaction.followup.send(
                 embed=info_embed(info, chapters),
                 view=ChapterBrowser(self, info, chapters, self.kakao_downloader),

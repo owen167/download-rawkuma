@@ -50,7 +50,7 @@ def test_kakao_data_url_detects_webp_magic_bytes():
 
 def test_kakao_episode_listing_uses_public_v2_endpoint(tmp_path):
     downloader = make_downloader(tmp_path)
-    downloader._api_json = AsyncMock(
+    downloader._direct_api_json = AsyncMock(
         side_effect=[
             {"data": {"episodes": [
                 {"id": 10, "seoId": "demo-001", "no": 1, "title": "0화", "readable": True},
