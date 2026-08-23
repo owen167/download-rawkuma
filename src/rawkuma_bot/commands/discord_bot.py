@@ -132,18 +132,38 @@ class RawkumaBot(commands.Bot):
         self.manager = DownloadManager(settings, self.downloader, self.on_progress)
         self.job_messages: dict[str, discord.Message] = {}
         self.job_channels: dict[str, discord.abc.Messageable] = {}
+        self._guild_cleanup_done = False
 
     async def setup_hook(self) -> None:
-        log.info("Discord setup started; registering command count=1")
+        log.info("Discord setup started; clearing old global commands")
         await self.manager.start()
+        self.tree.clear_commands(guild=None)
         self.tree.add_command(self.download)
-        if self.settings.discord_guild_id:
-            guild = discord.Object(id=self.settings.discord_guild_id)
-            self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
-        else:
-            await self.tree.sync()
-        log.info("Discord command registration completed")
+        await self.tree.sync()
+        log.info("Global command sync completed; registered commands=download")
+
+    async def on_ready(self) -> None:
+        if self._guild_cleanup_done:
+            return
+        log.info("Discord ready; clearing old guild commands guild_count=%d", len(self.guilds))
+        for guild in self.guilds:
+            guild_object = discord.Object(id=guild.id)
+            self.tree.clear_commands(guild=guild_object)
+            self.tree.copy_global_to(guild=guild_object)
+            await self.tree.sync(guild=guild_object)
+            log.info("Guild command sync completed guild_id=%s registered=download", guild.id)
+        self._guild_cleanup_done = True
+
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+        log.error("Slash command failed name=%s", getattr(interaction.command, "qualified_name", "unknown"), exc_info=(type(error), error, error.__traceback__))
+        message = "❌ The command failed. Check the bot logs for details."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except discord.HTTPException:
+            log.exception("Could not send slash command error response")
 
     async def close(self) -> None:
         log.info("Shutting down Rawkuma Discord Bot")
