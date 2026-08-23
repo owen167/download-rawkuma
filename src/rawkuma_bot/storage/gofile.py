@@ -24,6 +24,7 @@ class GoFileStorage:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.timeout = aiohttp.ClientTimeout(total=settings.request_timeout_seconds)
+        self.upload_timeout = aiohttp.ClientTimeout(total=settings.gofile_upload_timeout_seconds)
         self.account_token = settings.gofile_token or None
 
     @staticmethod
@@ -65,7 +66,7 @@ class GoFileStorage:
         if not path.is_file():
             raise GoFileUploadError("Chapter archive does not exist")
         token = self.account_token
-        async with aiohttp.ClientSession(timeout=self.timeout) as session:
+        async with aiohttp.ClientSession(timeout=self.upload_timeout) as session:
             data = await self._upload_file(session, path, None, token)
         download_page = data.get("downloadPage")
         if isinstance(download_page, str) and download_page:
