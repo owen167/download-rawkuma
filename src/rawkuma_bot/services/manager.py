@@ -11,16 +11,23 @@ from typing import Awaitable, Callable
 from rawkuma_bot.config.settings import Settings
 from rawkuma_bot.downloaders.models import DownloadJob, JobStatus, MangaInfo, Chapter, Progress
 from rawkuma_bot.downloaders.rawkuma.downloader import RawkumaDownloader
-from .archive import build_archive
+from rawkuma_bot.storage.base import LocalStorage, StorageAdapter
 
 log = logging.getLogger(__name__)
 ProgressHandler = Callable[[DownloadJob], Awaitable[None]]
 
 
 class DownloadManager:
-    def __init__(self, settings: Settings, downloader: RawkumaDownloader, on_progress: ProgressHandler | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        downloader: RawkumaDownloader,
+        on_progress: ProgressHandler | None = None,
+        storage: StorageAdapter | None = None,
+    ) -> None:
         self.settings = settings
         self.downloader = downloader
+        self.storage = storage or LocalStorage()
         self.on_progress = on_progress
         self.queue: asyncio.Queue[DownloadJob] = asyncio.Queue()
         self.jobs: dict[str, DownloadJob] = {}
@@ -118,17 +125,21 @@ class DownloadManager:
             await self._emit(job)
             job.status = JobStatus.PACKAGING
             await self._emit(job)
-            job.archive_path = build_archive(job.manga, job.chapter, temp_job, self.settings.output_dir)
-            job.archive_size_bytes = job.archive_path.stat().st_size
-            log.info("Job packaged id=%s images=%d archive_bytes=%d", job.job_id, job.image_count, job.archive_size_bytes)
             job.status = JobStatus.UPLOADING
             await self._emit(job)
+            job.upload_url = await self.storage.publish_directory(temp_job, f"Chapter_{job.chapter.number}")
+            job.archive_size_bytes = sum(path.stat().st_size for path in temp_job.iterdir() if path.is_file())
+            log.info("Chapter uploaded id=%s images=%d bytes=%d", job.job_id, job.image_count, job.archive_size_bytes)
             job.status = JobStatus.COMPLETED
             job.finished_at = datetime.now(timezone.utc)
             log.info("Job completed id=%s chapter=%s", job.job_id, job.chapter.number)
             await self._emit(job)
         finally:
             shutil.rmtree(self.settings.temp_dir / f"job_{job.job_id}", ignore_errors=True)
+
+    def forget_job_record(self, job_id: str) -> None:
+        self.jobs.pop(job_id, None)
+        self._last_progress_emit.pop(job_id, None)
 
     def active_jobs(self) -> list[DownloadJob]:
         return [job for job in self.jobs.values() if job.status not in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}]

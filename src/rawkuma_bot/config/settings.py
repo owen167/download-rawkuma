@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 
     discord_token: str = Field(default="", validation_alias="DISCORD_TOKEN")
     discord_guild_id: int | None = Field(default=None, validation_alias="DISCORD_GUILD_ID")
+    gofile_token: str = Field(default="", validation_alias="GOFILE_TOKEN")
     database_url: str = Field(default="sqlite+aiosqlite:///./data/rawkuma_bot.db", validation_alias="DATABASE_URL")
     temp_dir: Path = Field(default=Path("./temp"), validation_alias="TEMP_DIR")
     output_dir: Path = Field(default=Path("./downloads"), validation_alias="OUTPUT_DIR")

@@ -11,6 +11,7 @@ from rawkuma_bot.downloaders.models import Chapter, DownloadJob, JobStatus, Mang
 from rawkuma_bot.downloaders.rawkuma.downloader import RawkumaDownloader
 from rawkuma_bot.downloaders.rawkuma.errors import RawkumaError
 from rawkuma_bot.services.manager import DownloadManager
+from rawkuma_bot.storage.gofile import GoFileStorage
 
 if TYPE_CHECKING:
     from rawkuma_bot.config.settings import Settings
@@ -57,6 +58,8 @@ def job_embed(job: DownloadJob) -> discord.Embed:
         title, colour = "❌ Download Failed", discord.Colour.red()
     elif job.status == JobStatus.QUEUED:
         title, colour = "⏳ Queued for Download", discord.Colour.gold()
+    elif job.status == JobStatus.UPLOADING:
+        title, colour = "☁️ Uploading to GoFile", discord.Colour.orange()
     else:
         title, colour = "📥 Downloading Chapter", discord.Colour.blurple()
     embed = discord.Embed(title=title, colour=colour)
@@ -69,6 +72,21 @@ def job_embed(job: DownloadJob) -> discord.Embed:
     embed.add_field(name="Status", value=job.status.value, inline=True)
     if job.error:
         embed.add_field(name="Error", value=job.error, inline=False)
+    return embed
+
+
+def chapter_ready_embed(job: DownloadJob) -> discord.Embed:
+    size_mb = job.archive_size_bytes / 1024 / 1024
+    embed = discord.Embed(
+        title="✅ Chapter Ready",
+        description=f"[Download {job.chapter.title} on GoFile]({job.upload_url})",
+        colour=discord.Colour.green(),
+    )
+    embed.add_field(name="📖 Chapter", value=job.chapter.title, inline=True)
+    embed.add_field(name="🖼️ Images", value=str(job.image_count), inline=True)
+    embed.add_field(name="📦 Size", value=f"{size_mb:.2f} MB", inline=True)
+    embed.add_field(name="🔗 Download Link", value=f"[Open on GoFile]({job.upload_url})", inline=False)
+    embed.set_footer(text="Rawkuma Download Bot")
     return embed
 
 
@@ -146,7 +164,7 @@ class RawkumaBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
         self.settings = settings
         self.downloader = RawkumaDownloader(settings)
-        self.manager = DownloadManager(settings, self.downloader, self.on_progress)
+        self.manager = DownloadManager(settings, self.downloader, self.on_progress, storage=GoFileStorage(settings))
         self.job_messages: dict[str, discord.Message] = {}
         self.job_channels: dict[str, discord.abc.Messageable] = {}
         self._command_cleanup_done = False
@@ -230,28 +248,37 @@ class RawkumaBot(commands.Bot):
 
     async def on_progress(self, job: DownloadJob) -> None:
         message = self.job_messages.get(job.job_id)
-        if message and job.status != JobStatus.COMPLETED:
-            try:
+        if job.status != JobStatus.COMPLETED:
+            if message:
+                try:
+                    await message.edit(embed=job_embed(job))
+                except discord.HTTPException:
+                    log.debug("Could not update job %s", job.job_id)
+            return
+
+        if not job.upload_url:
+            job.status = JobStatus.FAILED
+            job.error = "GoFile did not return a share link"
+            if message:
                 await message.edit(embed=job_embed(job))
-            except discord.HTTPException:
-                log.debug("Could not update job %s", job.job_id)
-        if job.status == JobStatus.COMPLETED and job.archive_path:
-            log.info("Publishing completed job id=%s", job.job_id)
-            archive = job.archive_path
+            return
+
+        channel = self.job_channels.get(job.job_id)
+        if not channel:
+            log.error("Could not publish GoFile link; channel missing job_id=%s", job.job_id)
+            return
+
+        log.info("Publishing GoFile link id=%s chapter=%s", job.job_id, job.chapter.number)
+        await channel.send(embed=chapter_ready_embed(job))
+        if message:
             try:
-                channel = self.job_channels.get(job.job_id)
-                if archive.stat().st_size > self.settings.discord_max_file_mb * 1024 * 1024:
-                    job.status = JobStatus.FAILED
-                    job.error = "File Too Large"
-                    if message:
-                        await message.edit(embed=job_embed(job))
-                elif channel:
-                    await channel.send(file=discord.File(archive, filename=archive.name), embed=job_embed(job))
-            except Exception:
-                log.exception("Could not publish job %s", job.job_id)
-            finally:
-                archive.unlink(missing_ok=True)
-                job.archive_path = None
+                await message.delete()
+            except discord.HTTPException:
+                log.debug("Could not delete progress Embed job=%s", job.job_id)
+        self.job_messages.pop(job.job_id, None)
+        self.job_channels.pop(job.job_id, None)
+        self.manager.forget_job_record(job.job_id)
+        log.info("Progress Embed deleted and job record forgotten id=%s", job.job_id)
 
     async def enqueue(self, interaction: discord.Interaction, info: MangaInfo, chapters: list[Chapter]) -> None:
         chapters = chapters[: self.settings.max_chapters_per_job]
