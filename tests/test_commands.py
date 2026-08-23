@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import inspect
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -45,6 +46,12 @@ def test_guild_mode_registers_download_in_one_scope_only(tmp_path):
     assert [command.name for command in bot.tree.get_commands()] == []
     assert [command.name for command in bot.tree.get_commands(guild=guild)] == ["download"]
     assert bot.tree.sync.await_count == 2
+
+
+def test_download_callback_has_discord_signature(tmp_path):
+    bot = RawkumaBot(Settings(temp_dir=tmp_path / "temp", output_dir=tmp_path / "downloads"))
+    assert list(inspect.signature(bot.download.callback).parameters) == ["interaction", "url"]
+    assert bot.download.binding is None
 
 
 def test_command_tree_has_direct_error_handler(tmp_path):

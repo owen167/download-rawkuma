@@ -32,6 +32,15 @@ def info_embed(info: MangaInfo, chapters: list[Chapter]) -> discord.Embed:
     return embed
 
 
+@app_commands.command(name="download", description="Browse a Rawkuma manga, select chapters, and download them")
+@app_commands.describe(url="A Rawkuma manga or chapter URL")
+async def download_command(interaction: discord.Interaction, url: str) -> None:
+    handler = getattr(interaction.client, "handle_download", None)
+    if handler is None:
+        raise RuntimeError("Download command is not attached to the Rawkuma bot")
+    await handler(interaction, url)
+
+
 def status_embed(title: str, description: str, colour: discord.Colour) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, colour=colour)
     embed.set_footer(text="Rawkuma Download Bot")
@@ -139,6 +148,7 @@ class RawkumaBot(commands.Bot):
         self.job_messages: dict[str, discord.Message] = {}
         self.job_channels: dict[str, discord.abc.Messageable] = {}
         self._command_cleanup_done = False
+        self.download = download_command
         # CommandTree does not automatically use a Bot method named on_app_command_error.
         # Bind the handler explicitly so signature/sync errors receive an English response.
         self.tree.on_error = self.on_app_command_error
@@ -259,9 +269,7 @@ class RawkumaBot(commands.Bot):
             self.job_messages[job.job_id] = message
             self.job_channels[job.job_id] = interaction.channel
 
-    @app_commands.command(name="download", description="Browse a Rawkuma manga, select chapters, and download them")
-    @app_commands.describe(url="A Rawkuma manga or chapter URL")
-    async def download(self, interaction: discord.Interaction, url: str) -> None:
+    async def handle_download(self, interaction: discord.Interaction, url: str) -> None:
         log.info("Download command received user=%s guild=%s", interaction.user.id, interaction.guild_id or 0)
         await interaction.response.defer()
         try:
