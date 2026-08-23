@@ -231,7 +231,13 @@ class KakaoPageDownloader:
         return chapters
 
     async def _viewer_data(self, series_id: int, product_id: int) -> dict[str, Any]:
-        return await self._get_json(f"/v1/viewer/data?series_id={series_id}&product_id={product_id}")
+        payload = await self._get_json(f"/v1/viewer/data?series_id={series_id}&product_id={product_id}")
+        nested = payload.get("result")
+        if isinstance(nested, dict) and ("item" not in payload or "viewer_data" not in payload):
+            normalized = dict(payload)
+            normalized.update(nested)
+            return normalized
+        return payload
 
     async def get_chapter(self, url: str) -> Chapter:
         ids = self._product_ids(url)

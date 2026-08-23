@@ -80,3 +80,16 @@ def test_kakao_page_unfree_product_is_rejected(tmp_path):
     except ProductNotReadable:
         return
     raise AssertionError("unfree Kakao Page product was not rejected")
+
+
+def test_kakao_page_viewer_data_normalizes_nested_result(tmp_path):
+    downloader = make_downloader(tmp_path)
+    downloader._get_json = AsyncMock(return_value={
+        "result": {
+            "item": {"title": "Demo 2화", "is_free": True},
+            "viewer_data": {"contents_list": [{"secure_url": "signed.json"}]},
+        }
+    })
+    payload = asyncio.run(downloader._viewer_data(58200560, 58229208))
+    assert payload["item"]["is_free"] is True
+    assert payload["viewer_data"]["contents_list"][0]["secure_url"] == "signed.json"
